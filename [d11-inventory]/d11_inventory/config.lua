@@ -1,16 +1,19 @@
--- d11_inventory: os gestos do inventario. Sao EXTRAS: clicar em Usar (duplo clique, menu), as teclas de uso (1-5),
--- arrastar ate o painel do chao ("Por perto") e Shift+clique funcionam sempre, com qualquer valor aqui.
--- false desliga o gesto (soltar ali nao faz nada).
+-- d11_inventory settings.
+--
+-- Language (every D11 resource): setr d11_locale en | pt-BR in server.cfg. Default: en.
+--
+-- The inventory gestures are EXTRAS: clicking Use (double click, the item menu), the use keys (1-5), dragging onto
+-- the "Nearby" ground panel and shift-click always work, whatever is set here. false switches a gesture off
+-- (letting go there does nothing).
 D11Inventory = {
-    DragToBody    = true,   -- arrastar ate o personagem (ou a ficha) usa ou equipa o item
-    DragOutDrops  = true,   -- arrastar para fora da janela larga no chao
-    DropInVehicle = true,   -- ... tambem de dentro do veiculo (false: so a pe)
-    DropAnimated  = true,   -- com a animacao (pousar a pe, jogar pela janela) e a fisica da queda (false: larga na hora)
+    DragToBody    = true,   -- drag onto your character (or the character card) to use / equip
+    DragOutDrops  = true,   -- drag out of the window to drop on the ground
+    DropInVehicle = true,   -- ...also from inside a vehicle (false: on foot only)
+    DropAnimated  = true,   -- put-down / toss-out-of-the-window animation and physics (false: drops at once)
 }
 
--- Por um tempo, de outro script (cela, algemado, uma zona), no cliente:
---   exports.d11_inventory:BlockGesture('cela', 'dropOut', 'Voce nao pode largar coisas aqui')
---   exports.d11_inventory:UnblockGesture('cela')
--- gesture: 'body', 'dropOut' ou nil (os dois). O bloqueio cai sozinho se o resource que bloqueou parar.
--- Os bloqueios do whip_core (exports.whip_core:BlockInventoryGesture, docs/patches/whip_core-inventory-drag-gestures)
--- tambem valem aqui quando o whip_core os tem.
+-- For a while, from another script (a cell, handcuffs, a zone), client side:
+--   exports.d11_inventory:BlockGesture('cell', 'dropOut', 'You cannot drop things in here')
+--   exports.d11_inventory:UnblockGesture('cell')
+-- gesture: 'body', 'dropOut' or nil (both). A block goes away by itself when the resource that set it stops.
+-- whip_core's own blocks (exports.whip_core:BlockInventoryGesture, from the drag-gestures patch) count here too.

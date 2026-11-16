@@ -5,8 +5,8 @@ core. The renderer only draws: state, weights, rules and the server stay whip_co
 `api.actions` (whip_core `docs/nui-inventory.md`). Built and tested on whip_core 1.0.1; the patches below also
 apply cleanly to whip_core 1.1.0.
 
-> The UI text is in Brazilian Portuguese (our server's language). The labels live in `renderer.js` and in each
-> resource's `config.lua` / web files if you want to translate them.
+> **English and Brazilian Portuguese.** One line in server.cfg picks the language of every D11 resource:
+> `setr d11_locale en` (the default) or `setr d11_locale pt-BR`. See **Language** below.
 
 ## What's inside
 
@@ -65,6 +65,16 @@ A block is lifted by itself when the resource that set it stops. With the drag-g
 settings and blocks (`Config.InventoryDragToBody`, `InventoryDragOutDrops`, `InventoryDragOutInVehicle`,
 `InventoryDragOutAnimated`, `exports.whip_core:BlockInventoryGesture`) are honoured too.
 
+## Language
+
+```cfg
+setr d11_locale en      # or pt-BR
+```
+
+English is the default. The inventory's texts are in `d11_inventory/locales.js` (the Portuguese text is the key, so a
+new language is one more map there); d11_bags and d11_attachments keep theirs in their `config.lua` (`L(english,
+portuguese)`). Item names that come from WHIP itself follow WHIP's own language.
+
 ## Requirements
 
 - whip_core 1.0.1 or newer.
@@ -76,6 +86,7 @@ settings and blocks (`Config.InventoryDragToBody`, `InventoryDragOutDrops`, `Inv
 After the `ensure whip_*` lines:
 
 ```cfg
+setr d11_locale en
 ensure d11_inventory
 setr whip_inventory_renderer d11_inventory
 ensure d11_bags

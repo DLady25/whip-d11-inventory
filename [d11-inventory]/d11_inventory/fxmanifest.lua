@@ -17,6 +17,7 @@ server_script 'server.lua'
 
 files {
     'renderer.js',
+    'locales.js',
     'style.css',
     'fonts/*',
 }

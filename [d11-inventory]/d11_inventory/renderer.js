@@ -6,18 +6,38 @@
 // chamada de api.actions (docs/nui-inventory.md), e um movimento recusado volta sozinho.
 // ============================================
 
+import { LOCALES, NUMBER_LOCALE } from './locales.js';
+
+// Idioma: setr d11_locale en | pt-BR no server.cfg (padrao en), lido pelo client/main.lua deste resource. O renderer
+// e importado pela pagina do whip_core logo cedo: tenta por ate ~5 s, enquanto o client deste resource sobe. Cada
+// tentativa tem prazo: uma resposta que nunca chega nao pode prender o import (o WHIP nao poe prazo nele).
+const LANG = await (async () => {
+    for (let i = 0; i < 8; i++) {
+        try {
+            const ask = fetch('https://d11_inventory/locale', { method: 'POST', body: '{}' }).then((r) => r.json());
+            const j = await Promise.race([ask, new Promise((ok) => setTimeout(() => ok(null), 400))]);
+            if (j && typeof j.lang === 'string') return j.lang;
+        } catch (e) { /* o client ainda nao subiu */ }
+        await new Promise((ok) => setTimeout(ok, 250));
+    }
+    return 'en';
+})();
+const DICT = LOCALES[LANG] || null;   // pt-BR: o proprio texto
+const T = (s) => (DICT && DICT[s] != null ? DICT[s] : s);
+const NUM = NUMBER_LOCALE[LANG] || 'en-US';
+
 const TYPES = {
-    food: ['C', 'Comida'], drink: ['B', 'Bebida'], consumable: ['C', 'Consumível'], medical: ['M', 'Médico'],
-    tool: ['T', 'Utilitário'], weapon: ['A', 'Arma'], ammo: ['A', 'Munição'], key: ['K', 'Chave'],
-    document: ['D', 'Documento'], container: ['R', 'Recipiente'], accessory: ['E', 'Acessório'],
-    electronics: ['E', 'Eletrônico'], currency: ['$', 'Dinheiro'], armour: ['P', 'Proteção'],
-    clothing: ['V', 'Roupa'], misc: ['X', 'Diverso'],
+    food: ['C', T('Comida')], drink: ['B', T('Bebida')], consumable: ['C', T('Consumível')], medical: ['M', T('Médico')],
+    tool: ['T', T('Utilitário')], weapon: ['A', T('Arma')], ammo: ['A', T('Munição')], key: ['K', T('Chave')],
+    document: ['D', T('Documento')], container: ['R', T('Recipiente')], accessory: ['E', T('Acessório')],
+    electronics: ['E', T('Eletrônico')], currency: ['$', T('Dinheiro')], armour: ['P', T('Proteção')],
+    clothing: ['V', T('Roupa')], misc: ['X', T('Diverso')],
 };
-const KICKER = { glovebox: 'Porta-luvas', trunk: 'Porta-malas', boot: 'Porta-malas', stash: 'Armazenamento', drop: 'No chão' };
+const KICKER = { glovebox: T('Porta-luvas'), trunk: T('Porta-malas'), boot: T('Porta-malas'), stash: T('Armazenamento'), drop: T('No chão') };
 const HOTBAR = 5;
 // Faixa de acessorios: 1-5 sao os do WHIP; 6+ a roupa vestida do d11_clothing, um encaixe por categoria
 const WORN_FROM = 6;
-const SHORT = { 'Acessório de pescoço': 'Pescoço' };
+const SHORT = { 'Acessório de pescoço': T('Pescoço') };
 // Pastas das fotos de roupa (CLOTHING_SLOTS de whip_core/html/js/utils.js)
 const CLOTHING_DIRS = {
     c: { 0: '00_head', 1: '01_masks', 2: '02_hair', 3: '03_arms_gloves', 4: '04_pants', 5: '05_bags',
@@ -38,16 +58,16 @@ function clothingPhoto(foto) {
 const fmtKg = (kg) => {
     kg = Number(kg) || 0;
     if (kg > 0 && kg < 1) return Math.round(kg * 1000) + 'g';
-    return kg.toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + 'kg';
+    return kg.toLocaleString(NUM, { maximumFractionDigits: 1 }) + 'kg';
 };
-const fmtMoney = (n) => '$' + (Number(n) || 0).toLocaleString('pt-BR');
+const fmtMoney = (n) => '$' + (Number(n) || 0).toLocaleString(NUM);
 
 export default function createRenderer({ api, mount, close, addStylesheet, signal }) {
     const { actions } = api;
     // Arrastar ate o personagem de verdade usa/equipa. Sem o anel do whip_core (api.body): o alvo e o corpo inteiro
     // na tela (client/body.lua projeta os ossos) e, com o item em cima, o personagem ganha um contorno. Mesma
     // interface do anel: begin(at), over(x, y), hit(x, y), end().
-    const BODY_LABELS = { equip: 'Equipar', use: 'Usar' };
+    const BODY_LABELS = { equip: T('Equipar'), use: T('Usar') };
     const body = (() => {
         const cb = (name, data) => fetch('https://d11_inventory/' + name, {
             method: 'POST', headers: { 'Content-Type': 'application/json; charset=UTF-8' }, body: JSON.stringify(data || {}),
@@ -139,7 +159,7 @@ export default function createRenderer({ api, mount, close, addStylesheet, signa
         if (ownPanel) {
             el.classList.add('bag-open');
             if (ownPanel === fillingPanel()) el.classList.add('bag-filling');
-            el.appendChild(span('d11-bag-tag', ownPanel === fillingPanel() ? 'Enchendo' : 'Aberta'));
+            el.appendChild(span('d11-bag-tag', ownPanel === fillingPanel() ? T('Enchendo') : T('Aberta')));
         }
 
         if (!opts.small) {
@@ -214,8 +234,8 @@ export default function createRenderer({ api, mount, close, addStylesheet, signa
         if (w.max > 0) {
             const box = div('d11-load');
             const label = div('d11-load-label');
-            label.appendChild(span('d11-load-k', 'Carga'));
-            label.appendChild(span('d11-load-v', (Number(w.now) || 0).toLocaleString('pt-BR', { maximumFractionDigits: 2 })));
+            label.appendChild(span('d11-load-k', T('Carga')));
+            label.appendChild(span('d11-load-v', (Number(w.now) || 0).toLocaleString(NUM, { maximumFractionDigits: 2 })));
             label.appendChild(span('d11-load-max', ' / ' + w.max + ' kg'));
             box.appendChild(label);
             const bar = div('d11-bar');
@@ -236,15 +256,15 @@ export default function createRenderer({ api, mount, close, addStylesheet, signa
         const mark = div('d11-brand-mark');
         mark.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 8h14l-1 12H6L5 8Z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/></svg>';
         brand.appendChild(mark);
-        brand.appendChild(div('d11-shell-title', 'Inventário'));
+        brand.appendChild(div('d11-shell-title', T('Inventário')));
         c.appendChild(brand);
 
         const ctrls = div('d11-ctrls');
         // Crafting (d11_craft): o resource fecha o inventario e abre o crafting; de la, "Inventario" volta para ca.
         const craft = document.createElement('button');
         craft.className = 'd11-pill-btn wide';
-        craft.textContent = 'Crafting';
-        craft.title = 'Crafting';
+        craft.textContent = T('Crafting');
+        craft.title = T('Crafting');
         craft.addEventListener('click', () => {
             fetch('https://d11_craft/openFromInventory', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).catch(() => {});
         });
@@ -252,7 +272,7 @@ export default function createRenderer({ api, mount, close, addStylesheet, signa
         const help = document.createElement('button');
         help.className = 'd11-pill-btn' + (helpOpen ? ' on' : '');
         help.textContent = '?';
-        help.title = 'Comandos';
+        help.title = T('Comandos');
         help.addEventListener('click', () => { helpOpen = !helpOpen; render(); });
         ctrls.appendChild(help);
         const esc = document.createElement('button');
@@ -267,25 +287,25 @@ export default function createRenderer({ api, mount, close, addStylesheet, signa
 
     // "?": os comandos do inventario, teclado/mouse e controle
     const HELP = [
-        ['Mouse e teclado', [
-            ['Arrastar', 'Mover o item'],
-            ['No personagem', 'Arraste até o anel no seu personagem (ou a ficha) para usar ou equipar'],
-            ['Fora da janela', 'Arraste para fora para largar no chão'],
-            ['Shift + clique', 'Enviar para o outro lado'],
-            ['Duplo clique', 'Usar'],
-            ['Botão direito', 'Opções (Usar, Dar, Dividir…)'],
-            ['1 – 5', 'Acesso rápido, fora do inventário'],
-            ['Esc', 'Fechar'],
+        [T('Mouse e teclado'), [
+            [T('Arrastar'), T('Mover o item')],
+            [T('No personagem'), T('Arraste até o anel no seu personagem (ou a ficha) para usar ou equipar')],
+            [T('Fora da janela'), T('Arraste para fora para largar no chão')],
+            [T('Shift + clique'), T('Enviar para o outro lado')],
+            [T('Duplo clique'), T('Usar')],
+            [T('Botão direito'), T('Opções (Usar, Dar, Dividir…)')],
+            ['1 – 5', T('Acesso rápido, fora do inventário')],
+            ['Esc', T('Fechar')],
         ]],
-        ['Controle', [
-            ['Analógico esq.', 'Mover o cursor'],
-            ['D-pad', 'Pular para o slot vizinho'],
-            ['A', 'Toque: clicar · Segurar: arrastar · 2x: usar'],
-            ['X', 'Opções · Arrastando: mover 1'],
-            ['Y', 'Usar'],
-            ['RB + A', 'Enviar para o outro lado'],
-            ['LB / RB', 'Trocar de coluna'],
-            ['B', 'Voltar / soltar / fechar'],
+        [T('Controle'), [
+            [T('Analógico esq.'), T('Mover o cursor')],
+            [T('D-pad'), T('Pular para o slot vizinho')],
+            ['A', T('Toque: clicar · Segurar: arrastar · 2x: usar')],
+            ['X', T('Opções · Arrastando: mover 1')],
+            ['Y', T('Usar')],
+            [T('RB + A'), T('Enviar para o outro lado')],
+            [T('LB / RB'), T('Trocar de coluna')],
+            ['B', T('Voltar / soltar / fechar')],
         ]],
     ];
     function helpPanel() {
@@ -299,19 +319,20 @@ export default function createRenderer({ api, mount, close, addStylesheet, signa
             }
             p.appendChild(list);
         }
-        p.appendChild(div('d11-help-note', 'Dar e Dividir pedem a quantidade no próprio menu.'));
+        p.appendChild(div('d11-help-note', T('Dar e Dividir pedem a quantidade no próprio menu.')));
         return p;
     }
 
     function characterCard() {
         const i = inv();
         const c = card('d11-character');
+        c.dataset.dropLabel = T('Soltar para usar');   // style.css: .use-target::after
         const top = div('d11-char-top');
         const who = div('d11-char-who');
-        who.appendChild(div('d11-char-name', i.charName || 'Sem personagem'));
-        if (i.accountNum) who.appendChild(span('d11-chip', 'Conta ' + i.accountNum));
+        who.appendChild(div('d11-char-name', i.charName || T('Sem personagem')));
+        if (i.accountNum) who.appendChild(span('d11-chip', T('Conta ') + i.accountNum));
         top.appendChild(who);
-        if (i.charId) top.appendChild(div('d11-char-id', 'ID ' + i.charId));
+        if (i.charId) top.appendChild(div('d11-char-id', T('ID ') + i.charId));
         c.appendChild(top);
 
         let cash = 0, items = 0;
@@ -325,9 +346,9 @@ export default function createRenderer({ api, mount, close, addStylesheet, signa
         }
         const w = weightOf('player');
         const chips = div('d11-char-chips');
-        chips.appendChild(stat('Em mãos', fmtMoney(cash)));
-        chips.appendChild(stat('Itens', String(items)));
-        chips.appendChild(stat('Carga', fmtKg(w.now) + (w.max ? ' / ' + w.max + 'kg' : '')));
+        chips.appendChild(stat(T('Em mãos'), fmtMoney(cash)));
+        chips.appendChild(stat(T('Itens'), String(items)));
+        chips.appendChild(stat(T('Carga'), fmtKg(w.now) + (w.max ? ' / ' + w.max + 'kg' : '')));
         c.appendChild(chips);
         const eq = equipSection();
         if (eq) c.appendChild(eq);
@@ -347,8 +368,8 @@ export default function createRenderer({ api, mount, close, addStylesheet, signa
         if (!cfg.length) return null;
         const sec = div('d11-equip');
         const groups = [
-            ['Equipado', cfg.filter((s) => s.slot < WORN_FROM), ''],
-            ['Roupa', cfg.filter((s) => s.slot >= WORN_FROM), ' worn'],
+            [T('Equipado'), cfg.filter((s) => s.slot < WORN_FROM), ''],
+            [T('Roupa'), cfg.filter((s) => s.slot >= WORN_FROM), ' worn'],
         ];
         for (const [title, list, cls] of groups) {
             if (!list.length) continue;
@@ -369,7 +390,7 @@ export default function createRenderer({ api, mount, close, addStylesheet, signa
                     el.appendChild(ic);
                 }
                 cell.appendChild(el);
-                const label = s.label || 'Acessório';
+                const label = s.label || T('Acessório');
                 const lab = span('d11-equip-label', SHORT[label] || label);
                 lab.title = label;
                 cell.appendChild(lab);
@@ -384,7 +405,7 @@ export default function createRenderer({ api, mount, close, addStylesheet, signa
         const i = inv();
         const c = card('d11-pockets');
         const slots = (i.maxSlots && i.maxSlots.player) || 0;
-        c.appendChild(gridHeader('Mochila', 'Bolsos', 'player', slots, usedSlots(i.state && i.state.player)));
+        c.appendChild(gridHeader(T('Mochila'), T('Bolsos'), 'player', slots, usedSlots(i.state && i.state.player)));
         const g = grid('player', slots, 5);
         g.classList.add('scroll');
         c.appendChild(g);
@@ -394,8 +415,8 @@ export default function createRenderer({ api, mount, close, addStylesheet, signa
     function hotbarCard() {
         const c = card('d11-hotbar');
         const lab = div('d11-hotbar-label');
-        lab.appendChild(div('d11-kicker', 'Acesso rápido'));
-        lab.appendChild(div('d11-hotbar-sub', 'Slots 1-' + HOTBAR));
+        lab.appendChild(div('d11-kicker', T('Acesso rápido')));
+        lab.appendChild(div('d11-hotbar-sub', T('Slots 1-') + HOTBAR));
         c.appendChild(lab);
         const row = div('d11-hotbar-row');
         for (let s = 1; s <= HOTBAR; s++) row.appendChild(slotEl('player', s, { small: true, key: s }));
@@ -409,7 +430,7 @@ export default function createRenderer({ api, mount, close, addStylesheet, signa
         if (i.playerInvOpen) {
             const c = card('d11-external');
             const slots = (i.playerInvMaxSlots && i.playerInvMaxSlots.player) || 30;
-            c.appendChild(gridHeader('Revista', i.playerInvCharName || 'Jogador', 'targetPlayer', slots, usedSlots(i.playerInvItems && i.playerInvItems.player)));
+            c.appendChild(gridHeader(T('Revista'), i.playerInvCharName || T('Jogador'), 'targetPlayer', slots, usedSlots(i.playerInvItems && i.playerInvItems.player)));
             c.appendChild(grid('targetPlayer', slots, 5));
             out.push(c);
         }
@@ -417,13 +438,13 @@ export default function createRenderer({ api, mount, close, addStylesheet, signa
             const def = i.containerDef || {};
             const c = card('d11-external');
             const slots = def.slots || 20;
-            c.appendChild(gridHeader(KICKER[def.type] || 'Armazenamento externo', def.name || 'Armazenamento', 'container', slots, usedSlots(i.containerItems)));
+            c.appendChild(gridHeader(KICKER[def.type] || T('Armazenamento externo'), def.name || T('Armazenamento'), 'container', slots, usedSlots(i.containerItems)));
             c.appendChild(grid('container', slots, 5));
             out.push(c);
         }
         if (i.ignitionOpen) {
             const c = card('d11-ignition');
-            c.appendChild(div('d11-kicker', 'Ignição'));
+            c.appendChild(div('d11-kicker', T('Ignição')));
             c.appendChild(slotEl('ignition', 1, { small: true }));
             out.push(c);
         }
@@ -435,12 +456,12 @@ export default function createRenderer({ api, mount, close, addStylesheet, signa
             const c = card('d11-external d11-panel' + (filling ? ' filling' : ''));
             c.dataset.panel = p.key;
             const used = usedSlots(p.items);
-            const head = gridHeader(p.readOnly ? 'Somente leitura' : filling ? 'Enchendo' : 'Aberto', p.label || 'Painel', p.key, p.slots, used);
+            const head = gridHeader(p.readOnly ? T('Somente leitura') : filling ? T('Enchendo') : T('Aberto'), p.label || T('Painel'), p.key, p.slots, used);
             if (p.id != null) {
                 const x = document.createElement('button');
                 x.className = 'd11-pill-btn d11-panel-close';
                 x.textContent = '×';
-                x.title = 'Fechar';
+                x.title = T('Fechar');
                 x.addEventListener('click', () => closePanel(p, c));
                 head.appendChild(x);
             }
@@ -456,7 +477,7 @@ export default function createRenderer({ api, mount, close, addStylesheet, signa
             for (const k in piles) if (piles[k]) n = Math.max(n, Number(k) || 0);
             const count = Math.max(10, Math.ceil((n + 1) / 5) * 5);
             const c = card('d11-external d11-ground');
-            c.appendChild(gridHeader('Por perto', 'Chão', 'ground', 0, 0));
+            c.appendChild(gridHeader(T('Por perto'), T('Chão'), 'ground', 0, 0));
             c.appendChild(grid('ground', count, 5));
             out.push(c);
         }
@@ -603,7 +624,7 @@ export default function createRenderer({ api, mount, close, addStylesheet, signa
         if (drag.ghost) {
             drag.ghost.dataset.zone = zone === 'drop' ? 'drop' : use ? 'use' : '';
             const kind = use && actions.equipKind ? actions.equipKind(drag.from) : null;
-            drag.ghost.dataset.label = BODY_LABELS[kind] || BODY_LABELS.use;
+            drag.ghost.dataset.label = zone === 'drop' ? T('Largar no chão') : (BODY_LABELS[kind] || BODY_LABELS.use);
         }
     }
     function clearZone() {
@@ -708,7 +729,7 @@ export default function createRenderer({ api, mount, close, addStylesheet, signa
             if (to && (to.container !== d.from.container || to.slot !== d.from.slot)) run(actions.move(d.from, to));
             else if (zone === 'use') {
                 if (usable(d.from)) run(equip(d.from));
-                else { notify('Esse item não tem uso.'); render(); }
+                else { notify(T('Esse item não tem uso.')); render(); }
             }
             else if (zone === 'drop') dropToGround(d.from);
             else render();
@@ -729,7 +750,7 @@ export default function createRenderer({ api, mount, close, addStylesheet, signa
         if (groundBag) {   // bolsa no chao: abre ali (whip_core-ground-panel-d11.patch)
             const b = document.createElement('button');
             b.className = 'd11-menu-item';
-            b.textContent = 'Abrir';
+            b.textContent = T('Abrir');
             b.addEventListener('click', () => { closeMenu(); openGround(at); });
             el.appendChild(b);
             if (m && m.options && m.options.length) el.appendChild(div('d11-menu-sep'));
@@ -804,8 +825,8 @@ export default function createRenderer({ api, mount, close, addStylesheet, signa
         if (d.desc) el.appendChild(div('d11-tip-desc', d.desc));
         const rows = div('d11-tip-rows');
         const row = (k, v) => { const r = div('d11-tip-row'); r.append(span('', k), span('', v)); rows.appendChild(r); };
-        if (d.amount > 1) row('Quantidade', String(d.amount));
-        if (d.weight != null) row('Peso', fmtKg(d.weight) + (d.amount > 1 && d.weightEach != null ? ' (' + fmtKg(d.weightEach) + ' cada)' : ''));
+        if (d.amount > 1) row(T('Quantidade'), String(d.amount));
+        if (d.weight != null) row(T('Peso'), fmtKg(d.weight) + (d.amount > 1 && d.weightEach != null ? ' (' + fmtKg(d.weightEach) + T(' cada)') : ''));
         for (const l of d.lines || []) row(l.label, String(l.value));
         if (rows.children.length) el.appendChild(rows);
         overlay.appendChild(el);
@@ -1014,8 +1035,8 @@ export default function createRenderer({ api, mount, close, addStylesheet, signa
     }
 
     function padHints() {
-        if (menu) return [['dpad', 'Escolher'], ['a', 'Confirmar'], ['b', 'Voltar']];
-        return [['ls', 'Mover'], ['a', 'Segurar: arrastar'], [['rb', 'a'], 'Enviar'], ['x', 'Opções'], ['y', 'Usar'], ['b', 'Fechar']];
+        if (menu) return [['dpad', T('Escolher')], ['a', T('Confirmar')], ['b', T('Voltar')]];
+        return [['ls', T('Mover')], ['a', T('Segurar: arrastar')], [['rb', 'a'], T('Enviar')], ['x', T('Opções')], ['y', T('Usar')], ['b', T('Fechar')]];
     }
 
     function cancelDrag() {

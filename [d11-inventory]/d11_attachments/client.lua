@@ -215,7 +215,7 @@ local function sendInfo()
     end
     SendNUIMessage({ action = 'info', card = {
         kind = T.kindWeapon, label = (w and w.label) or def.name or data.weapon, icon = data.weapon,
-        description = def.description or def.desc, rows = rows, parts = parts, noParts = T.noParts,
+        description = def.description or def.desc, rows = rows, parts = parts, noParts = T.noParts, partsTitle = T.parts,
     } })
 end
 

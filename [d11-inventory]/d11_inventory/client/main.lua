@@ -1,5 +1,10 @@
 -- Largar no chao com animacao e fisica: client/drop.lua.
 
+-- Idioma do renderer: setr d11_locale en | pt-BR (server.cfg). Padrao en.
+RegisterNUICallback('locale', function(_, cb)
+    cb({ lang = GetConvar('d11_locale', 'en') })
+end)
+
 -- Abas de painel (bolsa, carteira): o "x" do renderer fecha uma so; "Abrir" numa pilha do chao abre a bolsa ali
 -- (com docs/patches/whip_core-ground-panel-d11.patch; sem ele responde fallback e o renderer pega e abre nos bolsos). O fechar passa pelo ClosePanel do servidor, que avisa o whip_core
 -- do cliente e a NUI.

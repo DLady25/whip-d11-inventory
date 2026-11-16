@@ -24,9 +24,9 @@ function D11Gestures.allowed(gesture)
 end
 
 exports('BlockGesture', function(id, gesture, label)
-    if type(id) ~= 'string' and type(id) ~= 'number' then return false, 'id deve ser texto ou numero' end
-    if gesture ~= nil and not GESTURES[gesture] then return false, "gesture deve ser 'body', 'dropOut' ou nil" end
-    if label ~= nil and (type(label) ~= 'string' or #label > 120) then return false, 'label deve ser texto (ate 120)' end
+    if type(id) ~= 'string' and type(id) ~= 'number' then return false, 'id must be a string or a number' end
+    if gesture ~= nil and not GESTURES[gesture] then return false, "gesture must be 'body', 'dropOut' or nil" end
+    if label ~= nil and (type(label) ~= 'string' or #label > 120) then return false, 'label must be a string (120 at most)' end
     local owner = GetInvokingResource() or GetCurrentResourceName()
     blocks[owner .. ':' .. tostring(id)] = { owner = owner, gesture = gesture, label = label }
     return true

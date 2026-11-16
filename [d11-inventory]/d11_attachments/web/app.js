@@ -128,6 +128,7 @@
             return '<div class="' + cls + '"><span class="k">' + esc(r.label) + '</span>'
                 + '<span class="v">' + esc(r.value) + bar + '</span></div>';
         }).join('');
+        document.getElementById('card-sec').textContent = c.partsTitle || '';
         const parts = c.parts || [];
         document.getElementById('card-parts').innerHTML = parts.length === 0
             ? '<div class="part none">' + esc(c.noParts) + '</div>'

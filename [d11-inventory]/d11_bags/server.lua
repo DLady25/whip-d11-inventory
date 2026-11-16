@@ -42,7 +42,7 @@ local function validator(bag)
         end
         if type(r) == 'table' and r.item then now = now - weightOf(r.item, r.amount, r.metadata) end
         if now + adding > bag.maxWeight + 0.0001 then
-            return false, ('Nao cabe: a %s aguenta %g kg'):format(bag.name, bag.maxWeight)
+            return false, D11BagsText.tooHeavy:format(bag.name, bag.maxWeight)
         end
         return true
     end
@@ -57,7 +57,7 @@ Whip.register(function()
             image = ('html/img/items/%s.png'):format(key),
             prop = bag.prop,
             defaultAction = D11BagsAction,
-            contextOptions = { { action = D11BagsAction, label = 'Abrir' } },
+            contextOptions = { { action = D11BagsAction, label = D11BagsText.open } },
         })
         if ok then
             ok, why = Whip.core:RegisterPanelItem(key, {
@@ -67,6 +67,6 @@ Whip.register(function()
         end
         if ok then n = n + 1 else failed[#failed + 1] = ('%s (%s)'):format(key, tostring(why)) end
     end
-    print(('[d11_bags] %d bolsas registradas%s'):format(n, #failed > 0 and ('; falharam: ' .. table.concat(failed, ', ')) or ''))
+    print(('[d11_bags] %d bags registered%s'):format(n, #failed > 0 and ('; failed: ' .. table.concat(failed, ', ')) or ''))
 end)
 

@@ -268,7 +268,7 @@ RegisterNUICallback('dropAnim', function(data, cb)
         cb({ ok = true, physics = true })
         if vehicle ~= 0 and anim.seat >= -1 and anim.seat <= 2 then RollDownWindow(vehicle, anim.seat + 1) end
         local ok, err = pcall(perform, ped, anim, model, { container = data.container, slot = slot, amount = amount }, vehicle)
-        if not ok then print(('[d11_inventory] largar com fisica falhou: %s'):format(tostring(err))) end
+        if not ok then print(('[d11_inventory] drop with physics failed: %s'):format(tostring(err))) end
         busy = false
     end)
 end)

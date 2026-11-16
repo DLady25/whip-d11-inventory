@@ -37,14 +37,14 @@ end
 function Calls.install(source, weapon, attachment)
     if not takesAttachments(weapon.item) then return false, Config.Text.noAttachments end
     local componentHash, att = Catalog.component(weapon.item, attachment.item)
-    if not componentHash then return false, 'Esta arma não aceita esse acessório.' end
+    if not componentHash then return false, Config.Text.wrongAttachment end
 
     local meta = weapon.metadata or {}
     meta.attachments = meta.attachments or {}
-    if meta.attachments[att.category] then return false, 'Esse encaixe já está ocupado.' end
+    if meta.attachments[att.category] then return false, Config.Text.slotTaken end
 
     local removed, why = exports.whip_core:StoreTake(attachment.addr, 1, { reason = 'acoplado na arma' })
-    if not removed then return false, why or 'Não foi possível pegar o acessório.' end
+    if not removed then return false, why or Config.Text.takeFailed end
 
     local fitted = {}
     for k, v in pairs(type(removed) == 'table' and type(removed.metadata) == 'table' and removed.metadata or {}) do
@@ -56,7 +56,7 @@ function Calls.install(source, weapon, attachment)
     if not exports.whip_core:SetItemMetadata(weapon.addr, meta) then
         local back = Whip.core:AddItem(source, attachment.item, 1, next(fitted) and fitted or nil, 'acoplar desfeito')
         if not back then print(('[d11_attachments] %s PERDIDO: arma nao gravou e o item nao voltou'):format(attachment.item)) end
-        return false, 'Não foi possível salvar a arma.'
+        return false, Config.Text.saveFailed
     end
 
     TriggerClientEvent('whip_gunny:client:attachmentInstalled', source, weapon.addr.slot, att.category, attachment.item, componentHash)
@@ -66,7 +66,7 @@ end
 function Calls.remove(source, weapon, category)
     local meta = weapon.metadata or {}
     local attName = (meta.attachments or {})[category]
-    if not attName then return false, 'Nada acoplado aí.' end
+    if not attName then return false, Config.Text.nothingThere end
     local componentHash = Catalog.component(weapon.item, attName)
 
     -- Sai da arma primeiro; o AddItem pode esperar (bolsos cheios largam no chao).
@@ -77,7 +77,7 @@ function Calls.remove(source, weapon, category)
     end
     if type(meta.attachmentMeta) == 'table' then meta.attachmentMeta[category] = nil end
     if type(meta.attachmentUids) == 'table' then meta.attachmentUids[category] = nil end
-    if not exports.whip_core:SetItemMetadata(weapon.addr, meta) then return false, 'Não foi possível salvar a arma.' end
+    if not exports.whip_core:SetItemMetadata(weapon.addr, meta) then return false, Config.Text.saveFailed end
 
     if not Whip.core:AddItem(source, attName, 1, fitted, 'retirado da arma') then
         -- Sem lugar nenhum: volta para a arma, se ela ainda estiver no mesmo slot.
@@ -96,7 +96,7 @@ function Calls.remove(source, weapon, category)
             end
         end
         if not ok then print(('[d11_attachments] %s PERDIDO: sem espaco e a arma nao aceitou de volta'):format(attName)) end
-        return false, 'Sem espaço para o acessório.'
+        return false, Config.Text.noRoom
     end
 
     TriggerClientEvent('whip_gunny:client:attachmentRemoved', source, weapon.addr.slot, category, componentHash)
@@ -128,5 +128,5 @@ Whip.register(function()
             if ok then count = count + 1 else print(('[d11_attachments] %s: %s'):format(weaponItem, tostring(why))) end
         end
     end
-    print(('[d11_attachments] "%s" em %d armas do gunny'):format(Config.MenuLabel, count))
+    print(('[d11_attachments] "%s" on %d gunny weapons'):format(Config.MenuLabel, count))
 end)

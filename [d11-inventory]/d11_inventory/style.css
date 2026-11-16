@@ -235,12 +235,12 @@
     font: italic 700 .62em/1 'D11 Display', sans-serif; letter-spacing: .06em; text-transform: uppercase; color: var(--dark);
 }
 .d11-ghost[data-zone="use"]::after { content: attr(data-label); color: var(--accent); }
-.d11-ghost[data-zone="drop"]::after { content: 'Largar no chão'; color: var(--amber); }
+.d11-ghost[data-zone="drop"]::after { content: attr(data-label); color: var(--amber); }
 /* ficha do personagem como alvo de usar */
 .d11-character { position: relative; transition: box-shadow .12s ease; }
 .d11-character.use-target { box-shadow: var(--shadow), inset 0 0 0 2px var(--accent); }
 .d11-character.use-target::after {
-    content: 'Soltar para usar'; position: absolute; inset: 0; display: grid; place-items: center; border-radius: inherit;
+    content: attr(data-drop-label); position: absolute; inset: 0; display: grid; place-items: center; border-radius: inherit;
     background: rgba(0, 156, 228, .12); font: italic 700 .9em/1 'D11 Display', sans-serif; letter-spacing: .08em; text-transform: uppercase;
     color: var(--accent); pointer-events: none;
 }
