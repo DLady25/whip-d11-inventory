@@ -1,0 +1,11 @@
+--- a/whip_core/client/inventory.lua	2026-11-15 22:45:04.476724200 -0300
++++ b/whip_core/client/inventory.lua	2026-11-15 22:45:04.519231700 -0300
+@@ -1045,7 +1045,7 @@
+     invOpen = true
+     if data and data.inventory then _cachedInventory = data.inventory end
+     if data then UpdateItemFlags(data) end
+-    TriggerScreenblurFadeIn(200)
++    -- D12: sem blur no jogo ao abrir o inventario (o fade-out do fechar fica: sem blur, nao faz nada).
+     Focus.take('inventory')
+ 
+     -- A panel in the context means the panel brought this screen up (see panelDrivenOpen).

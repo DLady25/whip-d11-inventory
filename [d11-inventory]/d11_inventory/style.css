@@ -1,0 +1,297 @@
+/* ========================================
+   d11_inventory — inventario D11 (variante escura)
+   Origem: resources/[ox]/ox_inventory/web/build/assets/d11-hud-theme.css @ bc7f7683d ([I]).
+   Medidas da VPS em 1920x1080 (1rem = 16px): coluna do jogador em left 24px, 605px de largura,
+   topo 54px; externo a direita com 566px; slot ~108px; hotbar como cartao embaixo.
+   Aqui 1em = 16px a 1080p e escala com a altura da tela, como o rem do ox_inventory.
+   ======================================== */
+
+@font-face { font-family: 'D11 Display'; src: url('fonts/Quantico-Bold.ttf') format('truetype'); font-weight: 400 900; font-display: block; }
+@font-face { font-family: 'D11 Text'; src: url('fonts/Geist-Medium.woff2') format('woff2'); font-weight: 400 800; font-display: block; }
+
+.d11inv {
+    /* tokens [I] l.9-23 */
+    --accent: #009CE4;
+    --crit: #ef655b;
+    --amber: #e7c779;
+    --green: #8fd3a8;
+    --shadow: 0 3px 12px rgba(0, 0, 0, .55);
+    --ink: #101419;          /* cartao */
+    --dark: #EBF2ED;         /* texto */
+    --tile: #171C22;
+    --tile-hover: #1F262E;
+    --sub: rgba(235, 242, 237, .68);
+    --faint: rgba(235, 242, 237, .42);
+    --neutral: rgba(235, 242, 237, .07);
+    --line: rgba(235, 242, 237, .1);
+    --title: italic 700 1em/1 'D11 Display', 'Arial Narrow', sans-serif;
+
+    position: fixed;
+    inset: 0;
+    z-index: 1;
+    font-size: calc(100vh / 67.5);
+    font-family: 'D11 Text', 'Segoe UI', Arial, sans-serif;
+    color: var(--dark);
+    user-select: none;
+    pointer-events: none;
+}
+.d11inv[hidden] { display: none; }
+.d11inv * { box-sizing: border-box; }
+.d11inv button, .d11inv input { font: inherit; color: inherit; }
+
+/* ---------- colunas ---------- */
+.d11-col { position: absolute; top: 3.375em; display: flex; flex-direction: column; gap: .5em; pointer-events: auto; }
+.d11-left { left: 1.5em; width: 37.8em; bottom: 1.5em; }
+.d11-right { right: 1.5em; width: 35.4em; max-height: calc(100% - 4.875em); overflow-y: auto; padding-right: .2em; }
+.d11-right:empty { display: none; }
+.d11-right::-webkit-scrollbar, .d11-grid.scroll::-webkit-scrollbar { width: .3em; }
+.d11-right::-webkit-scrollbar-thumb, .d11-grid.scroll::-webkit-scrollbar-thumb { background: var(--neutral); border-radius: 99px; }
+
+/* ---------- cartao: opaco, sem vidro ([I] l.39-48) ---------- */
+.d11-card {
+    background: var(--ink);
+    border-radius: .4em;
+    box-shadow: var(--shadow);
+    padding: .75em .9em;
+}
+.d11-card.flash { animation: d11-flash .5s ease-out; }
+@keyframes d11-flash { from { box-shadow: var(--shadow), inset 0 0 0 2px var(--accent); } }
+
+.d11-kicker { font: italic 700 .62em/1 'D11 Display', sans-serif; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); }
+.d11-title { font: var(--title); font-size: 1.05em; letter-spacing: .03em; text-transform: uppercase; color: var(--dark); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.d11-chip {
+    display: inline-flex; align-items: center;
+    padding: .22em .5em; border-radius: 99px;
+    background: var(--neutral);
+    font: italic 700 .62em/1 'D11 Display', sans-serif; letter-spacing: .04em; text-transform: uppercase;
+    font-variant-numeric: tabular-nums; color: var(--sub); white-space: nowrap;
+}
+
+/* ---------- cabecalho ([I] l.50-111) ---------- */
+.d11-shell { display: flex; align-items: center; justify-content: space-between; padding: .55em .7em; }
+.d11-brand { display: flex; align-items: center; gap: .6em; }
+.d11-brand-mark { width: 1.9em; height: 1.9em; border-radius: .3em; background: var(--dark); color: var(--ink); display: grid; place-items: center; }
+.d11-brand-mark svg { width: 1.1em; height: 1.1em; }
+.d11-shell-title { font: var(--title); font-size: 1.2em; letter-spacing: .03em; text-transform: uppercase; }
+.d11-ctrls { display: flex; align-items: center; gap: .35em; }
+.d11inv .d11-pill-btn {
+    min-width: 1.8em; height: 1.8em; padding: 0 .55em; border: 0; border-radius: 99px;
+    background: var(--dark); color: var(--ink); cursor: pointer;
+    font: italic 700 .62em/1 'D11 Display', sans-serif; letter-spacing: .06em; text-transform: uppercase;
+}
+.d11inv .d11-pill-btn.wide { min-width: 3em; }
+.d11inv .d11-pill-btn:hover { background: #fff; }
+.d11inv .d11-pill-btn.on { background: var(--accent); color: #fff; }
+
+/* painel do "?": cartao suspenso abaixo do cabecalho, a direita */
+.d11-shell { position: relative; }
+.d11-help {
+    position: absolute; top: calc(100% + .45em); right: 0; z-index: 6; width: 25em;
+    display: flex; flex-direction: column; gap: .45em; padding: .8em .9em;
+    border-radius: .4em; background: var(--ink); box-shadow: 0 10px 30px rgba(0, 0, 0, .45), 0 0 0 1px var(--line);
+}
+.d11-help-list { display: grid; grid-template-columns: 6.8em 1fr; gap: .35em .7em; align-items: center; margin-bottom: .35em; }
+.d11-help-key {
+    justify-self: start; padding: .3em .55em; border-radius: .3em; background: var(--neutral);
+    font: italic 700 .6em/1 'D11 Display', sans-serif; letter-spacing: .05em; text-transform: uppercase; color: var(--dark);
+}
+.d11-help-val { font-size: .72em; color: var(--sub); }
+.d11-help-note { padding-top: .5em; border-top: 1px solid var(--line); font-size: .66em; color: var(--faint); }
+
+/* ---------- ficha ([I] l.126-134) ---------- */
+.d11-character { display: flex; flex-direction: column; gap: .6em; }
+.d11-char-top { display: flex; align-items: center; justify-content: space-between; gap: .6em; }
+.d11-char-who { display: flex; align-items: center; gap: .5em; min-width: 0; }
+.d11-char-name { font: var(--title); font-size: 1em; letter-spacing: .03em; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.d11-char-id { padding: .3em .55em; border-radius: .4em; background: var(--neutral); font: italic 700 .7em/1 'D11 Display', sans-serif; letter-spacing: .04em; color: var(--sub); }
+.d11-char-chips { display: grid; grid-template-columns: repeat(3, 1fr); gap: .35em; }
+.d11-stat { display: flex; align-items: baseline; justify-content: space-between; gap: .4em; padding: .4em .6em; border-radius: 99px; background: var(--neutral); }
+.d11-stat-k { font: italic 700 .55em/1 'D11 Display', sans-serif; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); }
+.d11-stat-v { font: italic 700 .78em/1 'D11 Display', sans-serif; font-variant-numeric: tabular-nums; color: var(--accent); white-space: nowrap; }
+
+/* ---------- equipado: secao da ficha, abaixo de uma linha fina ----------
+   Hierarquia: ficha (quem) > equipado (o que esta no corpo) > bolsos (grade principal) > acesso rapido. */
+.d11-equip { display: flex; flex-direction: column; gap: .45em; padding-top: .6em; border-top: 1px solid var(--line); }
+.d11-sec-head { display: flex; align-items: center; justify-content: space-between; }
+.d11-equip-row { display: grid; grid-template-columns: repeat(var(--cols, 5), minmax(0, 1fr)); gap: .35em; }
+/* roupa vestida: 11 ladrilhos compactos numa linha so, abaixo dos acessorios */
+.d11-equip-row.worn { gap: .25em; }
+.d11-equip-row.worn .d11-equip-cell { gap: .22em; }
+.d11-equip-row.worn .d11-slot.small { height: 2.9em; }
+.d11-equip-row.worn .d11-equip-label { font-size: .44em; letter-spacing: .03em; }
+.d11-equip-row.worn .d11-equip-icon { inset: 22%; }
+.d11-equip .d11-sec-head + .d11-equip-row + .d11-sec-head { margin-top: .2em; }
+.d11-equip-cell { display: flex; flex-direction: column; align-items: center; gap: .3em; min-width: 0; }
+.d11-equip-cell .d11-slot.small { width: 100%; height: 3.8em; }
+.d11-equip-cell .d11-slot.small.filled { box-shadow: inset 0 -2px 0 var(--accent); }
+.d11-equip-label {
+    max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    font: italic 700 .5em/1 'D11 Display', sans-serif; letter-spacing: .06em; text-transform: uppercase; color: var(--faint);
+}
+.d11-equip-icon { position: absolute; inset: 26%; color: var(--faint); opacity: .7; }
+.d11-equip-icon svg { width: 100%; height: 100%; }
+
+/* ---------- cursor do controle ([I] mesmo papel do .pad-cursor do WHIP) ---------- */
+.d11-pad-cursor {
+    display: none; position: fixed; left: 0; top: 0; z-index: 13; pointer-events: none;
+    width: 1.5em; height: 1.5em; margin: -.75em 0 0 -.75em; border-radius: 50%;
+    border: 2px solid var(--dark); box-shadow: 0 0 0 2px rgba(0, 0, 0, .6), 0 0 8px rgba(0, 156, 228, .5);
+}
+.d11inv.pad .d11-pad-cursor { display: block; }
+.d11-slot.pad-over { box-shadow: inset 0 0 0 2px var(--accent); }
+.d11inv .d11-menu-item.pad-over { background: var(--dark); color: var(--ink); }
+.d11inv .d11-menu-item.danger.pad-over { background: var(--crit); color: var(--ink); }
+.d11inv .d11-pill-btn.pad-over, .d11inv input.pad-over { box-shadow: 0 0 0 2px var(--accent); }
+
+/* ---------- cabecalho da grade + carga ([I] l.171-195) ---------- */
+.d11-pockets { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.d11-grid-head { display: flex; align-items: flex-end; justify-content: space-between; gap: .8em; margin-bottom: .55em; }
+.d11-grid-title { display: flex; flex-direction: column; gap: .3em; min-width: 0; }
+.d11-title-row { display: flex; align-items: center; gap: .5em; min-width: 0; }
+.d11-load { display: flex; flex-direction: column; align-items: flex-end; gap: .3em; flex: none; }
+.d11-load-label { font: italic 700 .62em/1 'D11 Display', sans-serif; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); font-variant-numeric: tabular-nums; }
+.d11-load-k { margin-right: .5em; }
+.d11-load-v { font-size: 1.45em; color: var(--accent); letter-spacing: 0; }
+.d11-load-max { color: var(--faint); }
+.d11-bar { width: 7.5em; height: .2em; border-radius: 99px; background: var(--neutral); overflow: hidden; }
+.d11-bar-fill { height: 100%; background: var(--accent); transform-origin: left; transition: transform .25s ease; }
+.d11-bar.near .d11-bar-fill { background: var(--amber); }
+.d11-bar.full .d11-bar-fill { background: var(--crit); }
+
+/* ---------- grade e slot em faixas ([I] l.205-300) ---------- */
+.d11-grid { display: grid; grid-template-columns: repeat(var(--cols, 5), minmax(0, 1fr)); gap: .35em; }
+.d11-grid.scroll { flex: 1; min-height: 0; overflow-y: auto; align-content: start; padding-right: .2em; }
+.d11-slot {
+    position: relative; height: 7.1em; border-radius: .4em;
+    background: var(--neutral);
+    cursor: default; overflow: hidden;
+}
+.d11-slot.filled { background: var(--tile); cursor: grab; }
+.d11-slot.filled:hover { background: var(--tile-hover); }
+.d11-slot.dragging { opacity: .35; }
+.d11-slot.drop-ok { box-shadow: inset 0 0 0 2px var(--dark); }
+.d11-slot.drop-no { box-shadow: inset 0 0 0 2px var(--crit); background: rgba(239, 101, 91, .12); }
+.d11-slot-top { position: absolute; left: .4em; right: .4em; top: .4em; display: flex; align-items: center; justify-content: space-between; z-index: 2; }
+.d11-emblem {
+    min-width: 1.15em; height: 1.15em; padding: 0 .2em; border-radius: .25em;
+    background: var(--dark); color: var(--ink);
+    display: grid; place-items: center;
+    font: italic 700 .6em/1 'D11 Display', sans-serif;
+}
+.d11-slot-info { display: flex; align-items: center; gap: .35em; }
+.d11-weight { font: 600 .6em/1 'D11 Text', sans-serif; font-variant-numeric: tabular-nums; color: var(--faint); }
+.d11-qty {
+    padding: .18em .4em; border-radius: 99px; background: var(--dark); color: var(--ink);
+    font: italic 700 .62em/1 'D11 Display', sans-serif; font-variant-numeric: tabular-nums;
+}
+.d11-qty.corner { position: absolute; right: .3em; bottom: .3em; z-index: 2; }
+.d11-img { position: absolute; left: 50%; top: 46%; width: 54%; height: 46%; object-fit: contain; transform: translate(-50%, -50%); filter: drop-shadow(0 2px 4px rgba(0, 0, 0, .55)); pointer-events: none; }
+.d11-slot-foot { position: absolute; left: .45em; right: .45em; bottom: .4em; display: flex; flex-direction: column; gap: .15em; z-index: 2; }
+.d11-name {
+    font: 600 .68em/1.15 'D11 Text', sans-serif; color: var(--dark);
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
+}
+.d11-type { font: italic 700 .5em/1 'D11 Display', sans-serif; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); }
+.d11-price { position: absolute; right: .35em; bottom: .4em; z-index: 3; padding: .2em .45em; border-radius: 99px; background: var(--dark); color: var(--accent); font: italic 700 .66em/1 'D11 Display', sans-serif; }
+.d11-price.off { color: var(--faint); }
+
+/* raridade como moldura ([I] fix: --rarity-rgb) */
+.d11-slot.rarity-uncommon { box-shadow: inset 0 0 0 1px rgba(143, 211, 168, .7); }
+.d11-slot.rarity-rare { box-shadow: inset 0 0 0 1px rgba(0, 156, 228, .8); }
+.d11-slot.rarity-epic { box-shadow: inset 0 0 0 1px rgba(170, 120, 230, .8); }
+.d11-slot.rarity-legendary { box-shadow: inset 0 0 0 1px rgba(231, 199, 121, .85); }
+
+/* slot pequeno: hotbar, acessorios, ignicao */
+.d11-slot.small { width: 3.4em; height: 3.4em; flex: none; }
+.d11-slot.small .d11-img { top: 50%; width: 70%; height: 70%; }
+/* foto real da peca de roupa (metadata.foto do d11_clothing): ocupa quase todo o ladrilho */
+.d11-slot .d11-img.photo { top: 50%; width: 88%; height: 88%; filter: none; }
+.d11-key {
+    position: absolute; left: .25em; top: .25em; z-index: 2;
+    min-width: 1.1em; height: 1.1em; padding: 0 .2em; border-radius: 99px;
+    background: var(--dark); color: var(--ink); display: grid; place-items: center;
+    font: italic 700 .55em/1 'D11 Display', sans-serif;
+}
+.d11-slot.small.empty .d11-key { background: var(--neutral); color: var(--faint); }
+
+/* ---------- hotbar ([I] janela .hotbar-container) ---------- */
+.d11-hotbar { display: flex; align-items: center; gap: 1em; flex: none; }
+.d11-hotbar-label { display: flex; flex-direction: column; gap: .3em; min-width: 6.5em; }
+.d11-hotbar-sub { font: 600 .6em/1 'D11 Text', sans-serif; color: var(--faint); text-transform: uppercase; letter-spacing: .06em; }
+.d11-hotbar-row { display: flex; gap: .35em; flex: 1; }
+.d11-hotbar-row .d11-slot.small { flex: 1; width: auto; height: 3.6em; }
+
+/* ---------- ignicao ---------- */
+.d11-ignition { display: flex; align-items: center; justify-content: space-between; }
+
+/* ---------- menu, dica, fantasma, aviso ---------- */
+.d11-overlay { position: absolute; inset: 0; pointer-events: none; }
+.d11-ghost { position: fixed; left: 0; top: 0; width: 4.2em; height: 4.2em; margin: -2.1em 0 0 -2.1em; pointer-events: none; z-index: 10; }
+.d11-ghost img { width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 4px 12px rgba(0, 0, 0, .6)); }
+/* etiqueta do fantasma: o que acontece se soltar aqui (usar no personagem, largar fora das janelas) */
+.d11-ghost[data-zone="use"]::after, .d11-ghost[data-zone="drop"]::after {
+    position: absolute; left: 50%; top: 100%; transform: translate(-50%, .35em); white-space: nowrap;
+    padding: .35em .6em; border-radius: 99px; background: var(--ink); box-shadow: 0 2px 8px rgba(0, 0, 0, .5), inset 0 0 0 1px var(--line);
+    font: italic 700 .62em/1 'D11 Display', sans-serif; letter-spacing: .06em; text-transform: uppercase; color: var(--dark);
+}
+.d11-ghost[data-zone="use"]::after { content: attr(data-label); color: var(--accent); }
+.d11-ghost[data-zone="drop"]::after { content: 'Largar no chão'; color: var(--amber); }
+/* ficha do personagem como alvo de usar */
+.d11-character { position: relative; transition: box-shadow .12s ease; }
+.d11-character.use-target { box-shadow: var(--shadow), inset 0 0 0 2px var(--accent); }
+.d11-character.use-target::after {
+    content: 'Soltar para usar'; position: absolute; inset: 0; display: grid; place-items: center; border-radius: inherit;
+    background: rgba(0, 156, 228, .12); font: italic 700 .9em/1 'D11 Display', sans-serif; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--accent); pointer-events: none;
+}
+.d11-character.use-refuse { box-shadow: var(--shadow), inset 0 0 0 2px var(--crit); }
+/* item saindo para o chao (enquanto a mao desce) */
+.d11-slot.dropping .d11-img { opacity: .25; transform: translate(-50%, -30%) scale(.8); transition: opacity .3s ease, transform .3s ease; }
+.d11-menu, .d11-tip {
+    position: fixed; z-index: 11; min-width: 11em; max-width: 18em;
+    background: var(--ink); border-radius: .4em; box-shadow: var(--shadow); padding: .5em; pointer-events: auto;
+}
+.d11-tip { pointer-events: none; padding: .7em .8em; }
+.d11-menu-title, .d11-tip-name { font: var(--title); font-size: .9em; letter-spacing: .03em; text-transform: uppercase; padding: .2em .3em .5em; }
+.d11inv .d11-menu-item {
+    display: block; width: 100%; text-align: left; border: 0; background: transparent; cursor: pointer;
+    padding: .45em .55em; border-radius: 99px; font: 600 .78em/1 'D11 Text', sans-serif; color: var(--sub);
+}
+.d11inv .d11-menu-item:hover { background: var(--dark); color: var(--ink); }
+.d11inv .d11-menu-item.danger { color: var(--crit); }
+.d11inv .d11-menu-item.danger:hover { background: var(--crit); color: var(--ink); }
+.d11-menu-sep { height: 1px; margin: .3em .3em; background: var(--line); }
+.d11-menu-amount { display: flex; gap: .35em; padding: .4em .2em .1em; }
+.d11-menu-amount input {
+    flex: 1; min-width: 0; height: 1.9em; border: 0; border-radius: 99px; background: var(--neutral);
+    text-align: center; font: italic 700 .8em/1 'D11 Display', sans-serif; color: var(--accent); outline: none;
+}
+.d11-menu-amount input::-webkit-inner-spin-button { display: none; }
+.d11inv .d11-pill-btn.light { height: 2.4em; padding: 0 .9em; }
+.d11-tip-desc { font: 500 .72em/1.4 'D11 Text', sans-serif; color: var(--sub); padding: 0 .3em; }
+.d11-tip-rows { display: flex; flex-direction: column; gap: .25em; margin-top: .55em; padding: 0 .3em; }
+.d11-tip-row { display: flex; justify-content: space-between; gap: 1em; font: 600 .66em/1 'D11 Text', sans-serif; color: var(--faint); }
+.d11-tip-row span:last-child { color: var(--dark); font-variant-numeric: tabular-nums; }
+.d11-toast {
+    position: fixed; left: 50%; top: 1.2em; transform: translate(-50%, -.5em); opacity: 0; z-index: 12;
+    padding: .55em .9em; border-radius: .4em; background: var(--ink); box-shadow: var(--shadow), inset 2px 0 0 var(--crit);
+    font: 600 .8em/1 'D11 Text', sans-serif; transition: opacity .2s ease, transform .2s ease;
+}
+.d11-toast.on { opacity: 1; transform: translate(-50%, 0); }
+
+/* ---------- abas de bolsa: fechar, qual esta enchendo, onde o arrasto vai entrar ---------- */
+.d11-panel { transition: box-shadow .15s ease, opacity .15s ease; }
+.d11-panel .d11-grid-head { align-items: flex-start; }
+.d11inv .d11-panel-close { flex: none; margin-left: auto; width: 1.7em; height: 1.7em; padding: 0; font-size: 1em; line-height: 1; }
+.d11-panel.filling { box-shadow: var(--shadow), inset 3px 0 0 var(--accent); }
+.d11-panel.filling > .d11-grid-head .d11-kicker { color: var(--accent); }
+.d11-panel.drop-here { box-shadow: var(--shadow), inset 0 0 0 2px var(--accent); }
+.d11-panel.closing { opacity: .4; pointer-events: none; }
+.d11-slot.bag-open { box-shadow: inset 0 0 0 1px var(--faint); }
+.d11-slot.bag-filling, .d11-slot.bag-drop { box-shadow: inset 0 0 0 2px var(--accent); }
+.d11-bag-tag {
+    position: absolute; left: 50%; top: 2.3em; transform: translateX(-50%); z-index: 3;
+    padding: .25em .5em; border-radius: 99px; background: var(--ink); color: var(--faint); box-shadow: 0 0 0 1px var(--neutral);
+    font: italic 700 .5em/1 'D11 Display', sans-serif; letter-spacing: .06em; text-transform: uppercase; white-space: nowrap;
+}
+.d11-slot.bag-filling .d11-bag-tag { background: var(--accent); color: #fff; }

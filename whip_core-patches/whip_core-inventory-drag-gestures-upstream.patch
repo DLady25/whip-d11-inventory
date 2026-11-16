@@ -1,0 +1,932 @@
+whip_core: inventory gestures (WHIPFX/whip_core#65, branch feat/inventory-drag-gestures), cumulative diff over v1.1.0 (14a88af).
+Apply inside whip_core: git apply <this file>  (or patch -p1 <).
+
+diff --git a/client/ground.lua b/client/ground.lua
+index 02fa2ea..6f140e7 100644
+--- a/client/ground.lua
++++ b/client/ground.lua
+@@ -980,11 +980,30 @@ local function blocked(x1, y1, z1, x2, y2, z2, ped)
+     return hit == 1, at
+ end
+ 
++--- From inside a vehicle the rays below stop at its own body, so the spot is outside instead: beside the door on the
++--- side of the player's seat, a little clear of it, along the cabin. Never further from the player than the server
++--- takes a drop (GroundItemPickupRange). nil when there is no floor under it.
++---@return number|nil x, number|nil y, number|nil z
++local function vehicleDropSpot(ped, vehicle)
++    local p = GetEntityCoords(ped)
++    local off = GetOffsetFromEntityGivenWorldCoords(vehicle, p.x, p.y, p.z)
++    local mn, mx = GetModelDimensions(GetEntityModel(vehicle))
++    local reach = math.max(0.8, (Config.GroundItemPickupRange or 2.0) - 0.2)
++    local x = off.x > 0.0 and math.min(mx.x + 0.45, off.x + reach) or math.max(mn.x - 0.45, off.x - reach)
++    local y = math.max(mn.y + 0.3, math.min(mx.y - 0.3, off.y + (math.random() - 0.5) * 0.4))
++    local spot = GetOffsetFromEntityInWorldCoords(vehicle, x, y, 0.0)
++    local floor, at = blocked(spot.x, spot.y, spot.z + 1.5, spot.x, spot.y, spot.z - 3.0, vehicle)
++    if not floor then return nil end
++    return spot.x, spot.y, at.z
++end
++
+ --- A clear spot to drop on, as x, y, z (the floor), or nil when there is none.
+ ---@return number|nil x, number|nil y, number|nil z
+ local function findDropSpot()
+     local ped = PlayerPedId()
+     if ped == 0 then return nil end
++    local vehicle = GetVehiclePedIsIn(ped, false)
++    if vehicle ~= 0 then return vehicleDropSpot(ped, vehicle) end
+     local p = GetEntityCoords(ped)            -- the pelvis, about 1 m up
+     local heading = GetEntityHeading(ped)
+     local chest, knee = p.z + 0.3, p.z - 0.5
+@@ -1029,13 +1048,21 @@ end
+ -- opId rides along on all three: the NUI opens an optimistic operation for every ground
+ -- gesture, and the server echoes the id on refusal so the revert unwinds exactly that
+ -- gesture (storeMove's contract).
++--- Drop a stack from the pockets on a clear spot (findDropSpot). With no spot, "Nowhere to place!" goes to the page.
++--- Also the fallback of a drop by hand (client/inventory_gestures.lua) that cannot be animated.
++---@param container string
++---@param slot number
++---@param amount number|nil  nil: the whole stack
++---@param opId number|nil    the page's optimistic op, when it opened one
++function DropToGround(container, slot, amount, opId)
++    local x, y, z = findDropSpot()
++    if not x then return nowhereToPlace(opId) end
++    TriggerServerEvent('whip_core:server:dropToGround', container, slot, amount, opId or 0, x, y, z)
++end
++
+ RegisterNUICallback('dropToGround', function(data, cb)
+     cb('ok')
+-    local x, y, z = findDropSpot()
+-    if not x then return nowhereToPlace(data.opId) end
+-    TriggerServerEvent('whip_core:server:dropToGround',
+-        data.fromContainer, data.fromSlot, data.amount, data.opId or 0, x, y, z
+-    )
++    DropToGround(data.fromContainer, data.fromSlot, data.amount, data.opId)
+ end)
+ 
+ RegisterNUICallback('pickupGroundItem', function(data, cb)
+diff --git a/client/inventory_gestures.lua b/client/inventory_gestures.lua
+new file mode 100644
+index 0000000..0cda8d3
+--- /dev/null
++++ b/client/inventory_gestures.lua
+@@ -0,0 +1,365 @@
++-- ============================================
++-- Inventory gestures: drag onto your character, drag out to drop
++-- ============================================
++--
++-- Two gestures of the inventory page (js/core/inv-body.js, js/core/inv-actions.js), each with a switch in config.lua:
++--
++--   * ON YOUR CHARACTER (Config.InventoryDragToBody). While an item from the pockets is dragged, the page draws a ring
++--     over the player's own character in the world, wherever they are on screen; letting go on it uses or equips the
++--     item. The ring's place is the chest, projected here every frame while the drag lasts (bodyTrack).
++--   * OUT OF THE INVENTORY (Config.InventoryDragOutDrops). Letting go outside every panel drops the stack, from the
++--     hand (dropByHand): on foot the player bends down and puts it down; in a vehicle they wind the window down and toss
++--     it out on their seat's side, moving or not, and it falls with the vehicle's speed. Either way the item is a real
++--     object in the player's hand that falls with physics where the hand lets go, the path of a thrown item
++--     (whip_core:server:throwLaunched / throwSettled): the pile exists from the moment it leaves the hand and lies
++--     where the object comes to rest. Where no animation fits (swimming, falling, already dropping), it is a plain drop
++--     on a clear spot (DropToGround, client/ground.lua).
++--
++-- BOTH ARE EXTRAS. Clicking (Use), the use keys, a drag onto Nearby and shift-click all work as before, whatever is
++-- set here. Each gesture can be switched off in config.lua (InventoryDragToBody, InventoryDragOutDrops, and for the
++-- drop InventoryDragOutInVehicle / InventoryDragOutAnimated), and for a while by a script (BlockInventoryGesture):
++-- a cell, handcuffs, a no-littering zone.
++
++local function yes(v) return v == true or v == 1 end
++
++-- ---- Switched off for a while: a script's block ----
++
++local GESTURES = { body = true, dropOut = true }
++local gestureBlocks = {}   -- the registry's store: { gesture = 'body'|'dropOut'|nil (both), label = string|nil }
++local gestureReg = Registry.new('InventoryGestureBlock', {
++    label  = 'inventory gesture block',
++    store  = gestureBlocks,
++    scoped = true,
++})
++
++--- May `gesture` ('body' or 'dropOut') be used now? True, or false and why: a block's words, nil when config.lua has
++--- it off (nothing to say: the gesture simply is not there).
++---@return boolean allowed
++---@return string|nil why
++local function gestureAllowed(gesture)
++    if gesture == 'body' and Config.InventoryDragToBody == false then return false end
++    if gesture == 'dropOut' and Config.InventoryDragOutDrops == false then return false end
++    for _, b in pairs(gestureBlocks) do
++        if b.gesture == nil or b.gesture == gesture then return false, b.label end
++    end
++    return true
++end
++exports('InventoryGestureAllowed', gestureAllowed)
++
++--- Switch a gesture off until UnblockInventoryGesture(id), or this resource stops. `gesture`: 'body', 'dropOut', or
++--- nil for both. `label`: what the player is told when they try (a drop); nil says nothing.
++---
++---     exports.whip_core:BlockInventoryGesture('cell', 'dropOut', 'You cannot drop things in here')
++exports('BlockInventoryGesture', function(id, gesture, label)
++    if gesture ~= nil and not GESTURES[gesture] then return false, "gesture must be 'body', 'dropOut' or nil" end
++    if label ~= nil and (type(label) ~= 'string' or #label > 120) then return false, 'label must be a string (120 at most)' end
++    local ok, why = gestureReg:add(Registry.caller(), id, { gesture = gesture, label = label })
++    if not ok then return false, why end
++    return true
++end)
++
++exports('UnblockInventoryGesture', function(id)
++    local ok, why = gestureReg:remove(Registry.caller(), id)
++    if not ok then return false, why end
++    return true
++end)
++
++-- ---- On your character ----
++
++local BODY_BONE = 24818              -- SKEL_Spine3: the chest
++local BODY_HIDDEN = { 0.5, 0.82 }    -- where the ring sits when the chest is not on screen (first person): low, centred
++local bodyRun = 0   -- bumped by every on and off: a frame loop runs only while it is still the current one
++
++--- The chest on screen as x, y (0-1), or the fallback spot when it cannot be seen.
++local function bodyPoint()
++    local ped = PlayerPedId()
++    local firstPerson = IsPedInAnyVehicle(ped, false) and GetFollowVehicleCamViewMode() == 4
++        or (not IsPedInAnyVehicle(ped, false) and GetFollowPedCamViewMode() == 4)
++    if not firstPerson then
++        local c = GetPedBoneCoords(ped, BODY_BONE, 0.0, 0.0, 0.0)
++        local seen, x, y = GetScreenCoordFromWorldCoord(c.x, c.y, c.z)
++        if yes(seen) and x > 0.02 and x < 0.98 and y > 0.02 and y < 0.98 then return x, y end
++    end
++    return BODY_HIDDEN[1], BODY_HIDDEN[2]
++end
++
++-- { on = true } starts the frames (action 'bodyPoint'), { on = false } stops them. Answers { on }: false when the
++-- gesture is switched off or the inventory is not open, and the page draws no ring.
++RegisterNUICallback('bodyTrack', function(data, cb)
++    local on = type(data) == 'table' and data.on == true and gestureAllowed('body') and Inventory.isOpen()
++    cb({ on = on and true or false })
++    bodyRun = bodyRun + 1
++    if not on then return end
++    local mine = bodyRun
++    CreateThread(function()
++        local lastX, lastY = -1.0, -1.0
++        while mine == bodyRun and Inventory.isOpen() do
++            -- Blocked mid-drag: the ring goes.
++            if not gestureAllowed('body') then SendNUIMessage({ action = 'bodyPoint', hidden = true }) break end
++            local x, y = bodyPoint()
++            -- Only a move the page can see: a still player sends nothing.
++            if math.abs(x - lastX) > 0.0005 or math.abs(y - lastY) > 0.0005 then
++                lastX, lastY = x, y
++                SendNUIMessage({ action = 'bodyPoint', x = x, y = y })
++            end
++            Wait(0)
++        end
++    end)
++end)
++
++-- ---- Out of the inventory: a drop from the hand ----
++
++-- On foot: bend down and put it down.
++local FOOT = { dict = 'pickup_object', clip = 'putdown_low', release = 0.35, flags = 0, bone = 57005 }
++-- In a vehicle: a drive-by grenade throw out of the seat's own window (throw_90l / throw_90r), upper body only, as a
++-- secondary task, the weapon hidden.
++local SEAT_DICT = {
++    [-1] = 'veh@drivebystd_ds_grenades', [0] = 'veh@drivebystd_ps_grenades',
++    [1] = 'veh@drivebystd_rds_grenades', [2] = 'veh@drivebystd_rps_grenades',
++}
++local BIKE_DICT = { front = 'veh@drivebybike@sport@front@grenade', rear = 'veh@drivebybike@sport@rear@grenade' }
++local UPPER_BODY = 16 + 32 + 1048576
++local RIGHT_HAND, LEFT_HAND = 57005, 18905
++local MAX_LAUNCH = 28.0          -- m/s: an item tossed from a moving vehicle leaves with its speed, up to this
++local LOAD_MS, RELEASE_MS = 1000, 1600
++local ON_PERSON = { player = true, accessory = true }
++-- At rest: slower than STILL_SPEED for STILL_MS (long enough for the server to see the object where it stopped) with
++-- the floor right under it (GROUNDED, m). Still with no floor under it for FROZEN_MS: frozen in the air, where the
++-- map's collision never loaded (left behind at speed); it goes to the floor found below.
++local STILL_SPEED, STILL_MS, FROZEN_MS, GROUNDED = 0.04, 600, 2000, 1.0
++local ANSWER_MS, TRACK_MS = 5000, 10000
++
++local dropping = false
++local pending = {}   -- [netId] = { groundId = number|false|nil }, as client/inventory.lua's throws
++
++RegisterNetEvent('whip_core:client:throwAccepted', function(netId, groundId)
++    if pending[netId] then pending[netId].groundId = groundId end
++end)
++RegisterNetEvent('whip_core:client:throwRefused', function(netId)
++    if pending[netId] then pending[netId].groundId = false end
++end)
++
++local function seatOf(ped, vehicle)
++    for seat = -1, GetVehicleMaxNumberOfPassengers(vehicle) - 1 do
++        if GetPedInVehicleSeat(vehicle, seat) == ped then return seat end
++    end
++end
++
++--- The toss out of this seat's window, or nil (no seat found, or the game lacks the clip).
++local function vehicleAnim(ped, vehicle)
++    local seat = seatOf(ped, vehicle)
++    if seat == nil then return nil end
++    local right = seat >= 0 and seat % 2 == 0
++    local dict = SEAT_DICT[seat] or SEAT_DICT[right and 2 or 1]
++    if GetVehicleClass(vehicle) == 8 then dict = seat == -1 and BIKE_DICT.front or BIKE_DICT.rear end
++    if not yes(DoesAnimDictExist(dict)) then return nil end
++    return { dict = dict, clip = right and 'throw_90r' or 'throw_90l', release = 0.35, flags = UPPER_BODY,
++             seat = seat, right = right, bone = right and RIGHT_HAND or LEFT_HAND }
++end
++
++local function loadModel(model)
++    RequestModel(model)
++    local deadline = GetGameTimer() + LOAD_MS
++    while not HasModelLoaded(model) and GetGameTimer() < deadline do Wait(0) end
++    return HasModelLoaded(model)
++end
++
++local function loadAnim(dict, model)
++    RequestAnimDict(dict)
++    local deadline = GetGameTimer() + LOAD_MS
++    while not HasAnimDictLoaded(dict) and GetGameTimer() < deadline do Wait(0) end
++    return HasAnimDictLoaded(dict) and loadModel(model)
++end
++
++--- Where the item leaves the hand, and how fast. Out of a vehicle: just outside its side, with its speed and a push
++--- away from it. On foot: a little ahead, at a walk's share of the player's speed.
++local function launch(ped, obj, anim, vehicle)
++    local pos = GetEntityCoords(obj)
++    local motion = GetEntityVelocity(vehicle ~= 0 and vehicle or ped)
++    if vehicle ~= 0 then
++        local mn, mx = GetModelDimensions(GetEntityModel(vehicle))
++        local hand = GetOffsetFromEntityGivenWorldCoords(vehicle, pos.x, pos.y, pos.z)
++        local x = anim.right and math.max(hand.x, mx.x + 0.15) or math.min(hand.x, mn.x - 0.15)
++        pos = GetOffsetFromEntityInWorldCoords(vehicle, x, hand.y, hand.z)
++        local out = GetOffsetFromEntityInWorldCoords(vehicle, anim.right and 1.0 or -1.0, 0.0, 0.0) - GetEntityCoords(vehicle)
++        local v = vector3(motion.x + out.x * 1.1, motion.y + out.y * 1.1, motion.z - 0.2)
++        if #v > MAX_LAUNCH then v = v * (MAX_LAUNCH / #v) end
++        return pos, v
++    end
++    local fwd = GetEntityForwardVector(ped)
++    return pos, vector3(motion.x * 0.35 + fwd.x * 0.45, motion.y * 0.35 + fwd.y * 0.45, motion.z * 0.15 - 0.15)
++end
++
++--- Let it fly: at `pos`, turned as `rot`, at `vel`.
++local function fly(obj, pos, rot, vel)
++    SetEntityCoordsNoOffset(obj, pos.x, pos.y, pos.z, false, false, false)
++    SetEntityRotation(obj, rot.x, rot.y, rot.z, 2, true)
++    SetEntityDynamic(obj, true)
++    SetEntityCollision(obj, true, true)
++    SetEntityHasGravity(obj, true)
++    ActivatePhysics(obj)
++    SetEntityVelocity(obj, vel.x, vel.y, vel.z)
++    -- The map's collision follows it: left behind by a fast vehicle, it would otherwise freeze in the air.
++    SetEntityLoadCollisionFlag(obj, true, 1)
++end
++
++--- A model with no physics of its own (an attachment prop, a custom one) stays where the hand let go. It falls as an
++--- invisible Config.DefaultGroundProp box instead (the server takes that for any item), carrying the item's model as
++--- a local visual. Returns the box and the visual, or nil.
++local function proxyFor(obj, model, pos, rot, vel)
++    local box = GetHashKey(Config.DefaultGroundProp)
++    if not loadModel(box) then return nil end
++    local body = CreateObject(box, pos.x, pos.y, pos.z, true, true, false)
++    SetModelAsNoLongerNeeded(box)
++    if not body or body == 0 then return nil end
++    SetEntityVisible(body, false, false)
++    DeleteEntity(obj)
++    local visual = loadModel(model) and CreateObject(model, pos.x, pos.y, pos.z, false, false, false) or 0
++    if visual ~= 0 then
++        SetEntityCollision(visual, false, false)
++        AttachEntityToEntity(visual, body, 0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, false, false, false, false, 2, true)
++        SetModelAsNoLongerNeeded(model)
++    end
++    fly(body, pos, rot, vel)
++    return body, visual ~= 0 and visual or nil
++end
++
++--- Resting for real: the map's collision loaded around it and the floor right under it.
++local function grounded(obj)
++    return yes(HasCollisionLoadedAroundEntity(obj)) and GetEntityHeightAboveGround(obj) < GROUNDED
++end
++
++--- The floor's z under `c`, or nil.
++local function groundZ(c)
++    RequestCollisionAtCoord(c.x, c.y, c.z)
++    for _, up in ipairs({ 2.0, 25.0 }) do
++        local found, z = GetGroundZFor_3dCoord(c.x, c.y, c.z + up, false)
++        if yes(found) then return z end
++    end
++end
++
++--- Name the falling object to the server and follow it to rest (as client/inventory.lua's TrackThrow, with no hit
++--- check: a drop is not a throw at anyone).
++local function track(obj, data, visual)
++    local deadline = GetGameTimer() + 1000
++    while not yes(NetworkGetEntityIsNetworked(obj)) and GetGameTimer() < deadline do Wait(0) end
++    local netId = NetworkGetNetworkIdFromEntity(obj)
++    SetNetworkIdCanMigrate(netId, false)
++    local t = {}
++    pending[netId] = t
++    TriggerServerEvent('whip_core:server:throwStarted', netId)
++    TriggerServerEvent('whip_core:server:throwLaunched', data.container, data.slot, data.amount, netId)
++    local started, stillSince = GetGameTimer(), nil
++    while true do
++        Wait(0)
++        local now = GetGameTimer()
++        -- Refused or unanswered: the item never left the pockets, so neither may its object.
++        if t.groundId == false or (t.groundId == nil and now - started > ANSWER_MS) then
++            if DoesEntityExist(obj) then DeleteEntity(obj) end
++            break
++        end
++        if not DoesEntityExist(obj) then break end   -- picked out of the air
++        if #GetEntityVelocity(obj) < STILL_SPEED then stillSince = stillSince or now else stillSince = nil end
++        local stillMs = stillSince and now - stillSince or 0
++        local landed = stillMs >= STILL_MS and grounded(obj)
++        local stuck = stillMs >= FROZEN_MS or now - started > TRACK_MS
++        if t.groundId and (landed or stuck) then
++            -- How it lies goes with it, unless it is a box carrying a visual (the box's pose is not the item's) or it
++            -- never came to rest: then it stands upright on the floor.
++            local settled = landed and not visual
++            local c, rot = GetEntityCoords(obj), GetEntityRotation(obj, 2)
++            if not landed then
++                local z = groundZ(c)
++                if z then c = vector3(c.x, c.y, z) end
++            end
++            TriggerServerEvent('whip_core:server:throwSettled', t.groundId, c.x, c.y, c.z, rot.z % 360.0, rot.x, rot.y, settled)
++            -- The server deletes it once the pile is drawn; this is the backstop.
++            SetTimeout(5000, function() if DoesEntityExist(obj) then DeleteEntity(obj) end end)
++            break
++        end
++    end
++    pending[netId] = nil
++    if visual then
++        local untilAt = GetGameTimer() + 5000
++        while DoesEntityExist(obj) and GetGameTimer() < untilAt do Wait(100) end
++        if DoesEntityExist(visual) then DeleteEntity(visual) end
++    end
++end
++
++local function perform(ped, anim, model, data, vehicle)
++    local c = GetEntityCoords(ped)
++    local obj = CreateObject(model, c.x, c.y, c.z - 2.0, true, true, false)
++    SetModelAsNoLongerNeeded(model)
++    if not obj or obj == 0 then
++        -- No object: it lands at the feet, as a throw's fallback does.
++        TriggerServerEvent('whip_core:server:throwItemLanded', data.container, data.slot, data.amount,
++            c.x, c.y, c.z - 0.5, GetEntityHeading(ped))
++        return
++    end
++    SetEntityCollision(obj, false, false)
++    AttachEntityToEntity(obj, ped, GetPedBoneIndex(ped, anim.bone), 0.12, 0.0, -0.02, 0.0, 0.0, 0.0,
++        true, true, false, true, 1, true)
++
++    TaskPlayAnim(ped, anim.dict, anim.clip, 4.0, -4.0, -1, anim.flags, 0.0, false, false, false)
++    local deadline = GetGameTimer() + RELEASE_MS
++    while GetGameTimer() < deadline do
++        if yes(IsEntityPlayingAnim(ped, anim.dict, anim.clip, 3))
++            and GetEntityAnimCurrentTime(ped, anim.dict, anim.clip) >= anim.release then break end
++        Wait(0)
++    end
++
++    -- The hand lets go: it falls.
++    local pos, vel = launch(ped, obj, anim, vehicle)
++    local rot = GetEntityRotation(obj, 2)
++    DetachEntity(obj, true, true)
++    fly(obj, pos, rot, vel)
++    Wait(0)
++    local visual
++    if not yes(DoesEntityHavePhysics(obj)) then
++        local body
++        body, visual = proxyFor(obj, model, pos, rot, vel)
++        if body then obj = body end
++    end
++    CreateThread(function() track(obj, data, visual) end)
++
++    deadline = GetGameTimer() + 1500
++    while yes(IsEntityPlayingAnim(ped, anim.dict, anim.clip, 3)) and GetGameTimer() < deadline do Wait(50) end
++    RemoveAnimDict(anim.dict)
++end
++
++-- { container, slot, amount, item }: a stack from the pockets, let go outside every panel. Answers { ok }, or
++-- { ok = false, reason? } when the gesture is off here (the page leaves the item where it was and shows the reason).
++RegisterNUICallback('dropByHand', function(data, cb)
++    data = type(data) == 'table' and data or {}
++    local allowed, why = gestureAllowed('dropOut')
++    if not allowed then return cb({ ok = false, reason = why }) end
++    if Config.InventoryDragOutInVehicle == false and IsPedInAnyVehicle(PlayerPedId(), false) then
++        return cb({ ok = false })
++    end
++    local slot, amount = math.tointeger(tonumber(data.slot)), math.tointeger(tonumber(data.amount))
++    if not ON_PERSON[data.container] or not slot or not amount or amount < 1 or type(data.item) ~= 'string' then
++        return cb({ ok = false })
++    end
++    cb({ ok = true })
++
++    local ped = PlayerPedId()
++    local vehicle = GetVehiclePedIsIn(ped, false)
++    local anim = vehicle ~= 0 and vehicleAnim(ped, vehicle) or (vehicle == 0 and FOOT or nil)
++    -- No animation where none fits, or none wanted (InventoryDragOutAnimated): a plain drop on a clear spot.
++    if Config.InventoryDragOutAnimated == false or not anim or dropping or yes(IsPedSwimming(ped)) or yes(IsPedFalling(ped)) or yes(IsPedRagdoll(ped))
++        or yes(IsEntityDead(ped)) then
++        return DropToGround(data.container, slot, amount)
++    end
++    dropping = true
++    CreateThread(function()
++        local model = GetHashKey(Inventory.itemPropModel(data.item))
++        if not loadAnim(anim.dict, model) then
++            dropping = false
++            return DropToGround(data.container, slot, amount)
++        end
++        if vehicle ~= 0 and anim.seat >= -1 and anim.seat <= 2 then RollDownWindow(vehicle, anim.seat + 1) end
++        local ok, err = pcall(perform, ped, anim, model, { container = data.container, slot = slot, amount = amount }, vehicle)
++        if not ok then print(('[whip_core:inv] a drop by hand failed: %s'):format(tostring(err))) end
++        dropping = false
++    end)
++end)
+diff --git a/config.lua b/config.lua
+index 6e1e50c..55b957e 100644
+--- a/config.lua
++++ b/config.lua
+@@ -1394,6 +1394,19 @@ Config.GroundItemPickupRange = 2.0     -- How close before dropped items show in
+ Config.GroundItemStreamRange = 100.0   -- How far away dropped items still appear in the world (door lock changes ride this too: keep it 50 or more)
+ Config.PlaceItemRange        = 10.5    -- How far away you can set an item down (metres, from the camera)
+ 
++-- Two inventory gestures (client/inventory_gestures.lua), extras on top of clicking Use, the use keys, a drag onto
++-- Nearby and shift-click, which always work. Each on its own; false leaves the gesture doing nothing. A script can
++-- also switch one off for a while: exports.whip_core:BlockInventoryGesture(id, 'body'|'dropOut'|nil, label).
++-- Drag onto your character: while an item from the pockets is dragged, a ring shows over the player's own character
++-- in the world; letting go on it uses the item, or equips it (into the accessory strip when it fits there; a weapon
++-- is drawn and clothing worn by their own use).
++Config.InventoryDragToBody   = true
++-- Drag out to drop: letting go of an item outside every panel drops the stack, from the hand. On foot the player puts
++-- it down; in a vehicle they toss it out of their window, moving or not. It falls with physics and lies where it stops.
++Config.InventoryDragOutDrops = true
++Config.InventoryDragOutInVehicle = true   -- false: not from inside a vehicle (on foot only)
++Config.InventoryDragOutAnimated  = true   -- false: no put-down / toss animation; it lands on a clear spot at once
++
+ -- How the player moves while holding an item out to give it: `walk` is a /walk name ('trash'), or nil for their own
+ -- walk; `speed` is 'jog' (no sprint), 'walk' (no running) or nil (as fast as they like). A resource can set its own
+ -- with SetGiveModeStyle. One item can keep the player's own walk: "Allow player walk animation" on its /whip Items page.
+diff --git a/docs/nui-inventory.md b/docs/nui-inventory.md
+index b4ff946..79f7596 100644
+--- a/docs/nui-inventory.md
++++ b/docs/nui-inventory.md
+@@ -116,6 +116,9 @@ whip puts the state back, calls your `render`, and tells the player why (`notify
+ | `split(at, amount)` | Split `amount` off into the first free slot (on the ground, a new pile) |
+ | `destroy(at)` | Developer mode only |
+ | `use(at)`, `give(at, amount?)`, `place(at)` | Items on your person. Give asks who to; Place closes the inventory and starts placing |
++| `equip(at)` | On your person: into the accessory strip when a typed slot there takes it (cash, a wallet, keys), else its use (a weapon drawn, clothing worn, food eaten). What letting go on the character does (below) |
++| `equipKind(at)` | `'equip'`, `'use'` or `null`: what `equip` would do, for a label |
++| `dropOut(at)` | On your person: drop the whole stack from the hand (put down on foot, tossed out of the window in a vehicle). Answers a Promise of `{ ok }`; `ok: false` when `Config.InventoryDragOutDrops` is off. The item leaves its slot when it leaves the hand, through the server's push |
+ | `menuFor(at)` | The slot's right-click menu as whip shows it: `{ title, options: [{ action, label, group, amount? }] }`, or null. `group` is `'own'`, `'shared'` or `'danger'` |
+ | `runOption(at, action, { amount })` | Run one of its options (Give and Split take `amount`) |
+ | `refused(from, to)` | Would that drop be refused before sending? For a red slot while dragging |
+@@ -127,6 +130,46 @@ if (!r.ok && r.reason) toast(r.reason);
+ redraw();
+ ```
+ 
++## Gestures on the world: onto the character, out of the inventory
++
++Two gestures whip's own inventory has, that a custom UI gets by calling the same things. They are extras: clicking
++Use, the use keys, a drag onto Nearby and shift-click work as before. Each can be switched off:
++
++| Setting (config.lua, also on `/whip` → Config) | Default | Off |
++| --- | --- | --- |
++| `InventoryDragToBody` | `true` | No ring |
++| `InventoryDragOutDrops` | `true` | Letting go outside the panels does nothing |
++| `InventoryDragOutInVehicle` | `true` | The same, but only from inside a vehicle |
++| `InventoryDragOutAnimated` | `true` | No put-down / toss: it lands on a clear spot at once |
++
++And for a while, from a script (client exports): `BlockInventoryGesture(id, 'body' | 'dropOut' | nil, label?)` until
++`UnblockInventoryGesture(id)` or your resource stops, for a cell, handcuffs or a zone. `label` is shown to a player
++who tries the drop. `InventoryGestureAllowed(gesture)` answers whether one may be used now, for a renderer that brings
++its own gestures.
++
++- **Onto the character** (`Config.InventoryDragToBody`). While an item from the pockets is dragged, a ring shows over
++  the player's own character in the world, wherever they are on screen; letting go on it is `actions.equip`. whip
++  draws the ring (over everything, under your dragged item) and Lua moves it with the character every frame. You only
++  tell it about the drag, with `api.body`:
++
++  | Call | When |
++  | --- | --- |
++  | `body.begin(at, labels?)` | A drag of `at` starts. No ring for an item with nothing to do, or with the gesture off. `labels` (`{ equip, use }`) are the ring's words, for your language |
++  | `body.over(x, y)` | The pointer moves (screen px). Lights the ring when on it, and answers `true` then: light no slot of yours |
++  | `body.hit(x, y)` | At the release, before your own targets: `true` means call `actions.equip(at)` |
++  | `body.end()` | The drag ended, however (whip also ends it when the inventory closes) |
++
++- **Out of the inventory** (`Config.InventoryDragOutDrops`). Letting go of a pockets item where none of your panels
++  are (the game shows there) is `actions.dropOut(at)`. You decide what counts as outside; whip's own counts anything
++  that is not a panel, the accessory strip, a menu or a tooltip.
++
++```js
++// at the release of a drag of `from`
++if (api.body.hit(e.clientX, e.clientY)) { const r = api.actions.equip(from); if (!r.ok && r.reason) toast(r.reason); }
++else if (!slotUnder && outsideMyPanels) api.actions.dropOut(from);
++api.body.end();
++```
++
+ ## What whip calls on you
+ 
+ **`render()`** is the one you must have. It draws everything from `api.inv`, and whip calls it whenever
+diff --git a/fxmanifest.lua b/fxmanifest.lua
+index b10011f..2f078d3 100644
+--- a/fxmanifest.lua
++++ b/fxmanifest.lua
+@@ -313,6 +313,8 @@ client_scripts {
+     'client/zones.lua',
+     'client/doors.lua',
+     'client/ground.lua',
++    -- After ground.lua (DropToGround) and inventory.lua (Inventory.isOpen, Inventory.itemPropModel).
++    'client/inventory_gestures.lua',
+     'client/placing.lua',
+     'client/interior_rooms.lua',
+     'client/viewport_room.lua',
+diff --git a/html/css/inventory.css b/html/css/inventory.css
+index 22b341b..6a829e2 100644
+--- a/html/css/inventory.css
++++ b/html/css/inventory.css
+@@ -1893,3 +1893,54 @@ html[data-input="pad"] #inv-split-panel .inv-split-input-row { padding-block: 0.
+ 
+ /* The character's name and id live in hidden #inv-name / #inv-charid. */
+ 
++/* ============================================================================
++   ON YOUR CHARACTER: the ring over the player's own character while an item is dragged (js/core/inv-body.js,
++   Config.InventoryDragToBody). Placed by a transform at the chest Lua projects; over every panel, under the
++   dragged item (10001). Lit (.hot) while the pointer is on it.
++   ============================================================================ */
++.inv-body-target {
++    position: fixed;
++    left: 0;
++    top: 0;
++    z-index: 10000;
++    pointer-events: none;
++    display: flex;
++    flex-direction: column;
++    align-items: center;
++    gap: 6px;
++    will-change: transform;
++}
++.inv-body-target[hidden] { display: none; }
++.inv-body-ring {
++    display: block;
++    width: 34px;
++    height: 34px;
++    margin-top: -17px;   /* the ring's centre on the point, the label below it */
++    border-radius: 50%;
++    border: 2px solid var(--ui-accent);
++    background: radial-gradient(circle, var(--ui-accent-medium) 0 22%, transparent 24%);
++    box-shadow: 0 0 0 4px var(--ui-accent-glow), 0 0 14px var(--ui-accent-medium);
++    animation: inv-body-pulse 1.4s ease-in-out infinite;
++}
++.inv-body-label {
++    padding: 3px 9px;
++    border-radius: var(--ui-radius-sm);
++    background: var(--ui-surface);
++    color: var(--ui-text);
++    font-family: var(--ui-font);
++    font-size: var(--ui-fs-sm);
++    font-weight: var(--ui-fw-semibold);
++    letter-spacing: 0.04em;
++    text-transform: uppercase;
++    opacity: 0.85;
++}
++.inv-body-target.hot .inv-body-ring {
++    animation: none;
++    transform: scale(1.25);
++    background: radial-gradient(circle, var(--ui-accent) 0 30%, transparent 32%);
++}
++.inv-body-target.hot .inv-body-label { opacity: 1; }
++@keyframes inv-body-pulse {
++    0%, 100% { box-shadow: 0 0 0 4px var(--ui-accent-glow), 0 0 14px var(--ui-accent-medium); }
++    50%      { box-shadow: 0 0 0 9px var(--ui-accent-subtle), 0 0 18px var(--ui-accent-medium); }
++}
+diff --git a/html/js/core/inv-actions.js b/html/js/core/inv-actions.js
+index af938cf..f78f282 100644
+--- a/html/js/core/inv-actions.js
++++ b/html/js/core/inv-actions.js
+@@ -789,6 +789,61 @@ export function place(at) {
+     return ok;
+ }
+ 
++// ------------------------------------------
++// Gestures: onto your character, out of the inventory
++// ------------------------------------------
++
++/** The strip slot an item on the person would be equipped into: a typed one (it names what it takes, or keys) that
++ *  takes it, empty first, else holding the same item (they stack), else the first (a swap). Null when none takes it
++ *  or the item is already in the strip. Untyped slots take anything, so they are not "where it goes". */
++function equipSlotFor(at, d) {
++    if (at.container === 'accessory') return null;
++    const typed = slotConfig.accessorySlots.filter(c => (c.accepts || c.keys) && slotTakesItem(c, d.item));
++    if (!typed.length) return null;
++    const strip = inv.state.accessory || {};
++    const free = typed.find(c => !strip[String(c.slot)]);
++    const same = typed.find(c => strip[String(c.slot)] && strip[String(c.slot)].item === d.item);
++    return (free || same || typed[0]).slot;
++}
++
++/** What letting go on your character would do with this item: 'equip' (into the strip), 'use', or null (nothing:
++ *  not on the person, or neither usable nor with a default action). For the ring's label while dragging. */
++export function equipKind(at) {
++    const d = onPerson(at);
++    if (!d) return null;
++    if (equipSlotFor(at, d) !== null) return 'equip';
++    const def = defOf(d.item);
++    return def && (def.usable || def.defaultAction) ? 'use' : null;
++}
++
++/**
++ * ON YOUR CHARACTER (Config.InventoryDragToBody): equip the item, else use it. Into the accessory strip when a typed
++ * slot there takes it (cash, a wallet, keys); otherwise its use, which is where a weapon is drawn, clothing worn and
++ * food eaten (its use handler, else its default action). Pockets only.
++ */
++export function equip(at) {
++    const d = onPerson(at);
++    if (!d) return no();
++    const slot = equipSlotFor(at, d);
++    if (slot !== null) return move(at, { container: 'accessory', slot });
++    if (!equipKind(at)) return no(nameOf(d.item) + " can't be used");
++    return use(at);
++}
++
++/**
++ * OUT OF THE INVENTORY (Config.InventoryDragOutDrops): drop the whole stack from the hand. On foot the player puts it
++ * down; in a vehicle they toss it out of their window. The item stays in its slot until it leaves the hand, then the
++ * server's push takes it off. Pockets only; answers { ok: false, reason? } when the gesture is off (config.lua, or a
++ * script's BlockInventoryGesture, whose words are the reason).
++ * @returns {Promise<{ok: boolean, reason?: string}>}
++ */
++export function dropOut(at) {
++    const d = onPerson(at);
++    if (!d) return Promise.resolve(no());
++    return nuiCallback('dropByHand', { container: at.container, slot: Number(at.slot), amount: d.amount || 1, item: d.item })
++        .then(r => (r && r.ok === true ? ok : no(r && r.reason ? r.reason : undefined)));
++}
++
+ // ------------------------------------------
+ // The right-click menu
+ // ------------------------------------------
+diff --git a/html/js/core/inv-body.js b/html/js/core/inv-body.js
+new file mode 100644
+index 0000000..5fecbd3
+--- /dev/null
++++ b/html/js/core/inv-body.js
+@@ -0,0 +1,107 @@
++// ========================================
++// INVENTORY CORE — ON YOUR CHARACTER
++//
++// The ring over the player's own character while an item is dragged (Config.InventoryDragToBody): letting go on it
++// equips or uses the item (actions.equip). The character is the real one in the world, behind the page, so Lua
++// projects its chest onto the screen every frame of the drag (client/inventory_gestures.lua, 'bodyPoint') and this
++// file only draws the ring there and answers whether a point is on it.
++//
++// FOR ANY RENDERER. whip's own inventory and a custom one (api.body) drive it the same way:
++//   begin(at, labels?)  a drag of `at` started. Nothing shows for an item with nothing to do (actions.equipKind)
++//                or with the gesture switched off. `labels` ({ equip, use }) names the ring in your own words.
++//   over(x, y)   the pointer moved: lights the ring when it is on it, and answers that.
++//   hit(x, y)    is (x, y) on the ring? Ask it at the release, before your own drop targets.
++//   end()        the drag is over, however it ended.
++// The ring is drawn over every panel, small enough to leave the slots around it reachable.
++// ========================================
++
++import { NuiRouter } from '../router.js';
++import { nuiCallback } from '../utils.js';
++import { invEvents } from './emitter.js';
++import { equipKind } from './inv-actions.js';
++
++const RADIUS = 44;                    // px at 1080p: how near the ring's centre a release counts
++const LABELS = { equip: 'Equip', use: 'Use' };
++
++let el = null;
++let point = null;       // { x, y } in px, or null until Lua's first frame
++let session = 0;        // bumped by begin and end: a late answer from an earlier drag is ignored
++let live = false;       // a drag with a ring (Lua said on)
++let hot = false;
++
++const scale = () => Math.max(0.6, window.innerHeight / 1080);
++
++function ensure() {
++    if (el && el.isConnected) return el;
++    el = document.createElement('div');
++    el.className = 'inv-body-target';
++    el.hidden = true;
++    el.innerHTML = '<i class="inv-body-ring" aria-hidden="true"></i><span class="inv-body-label"></span>';
++    document.body.appendChild(el);
++    return el;
++}
++
++function place() {
++    if (!el || !point) return;
++    el.style.transform = 'translate(' + point.x + 'px,' + point.y + 'px)';
++    el.hidden = !live;
++}
++
++function setHot(on) {
++    if (hot === on) return;
++    hot = on;
++    if (el) el.classList.toggle('hot', on);
++}
++
++/** A drag of `at` started. `labels`: { equip, use }, the ring's words (whip's own: Equip, Use). */
++export function begin(at, labels) {
++    end();
++    const kind = equipKind(at);
++    if (!kind) return;
++    const mine = ++session;
++    nuiCallback('bodyTrack', { on: true }).then((r) => {
++        if (mine !== session) return;
++        if (!r || r.on !== true) return;
++        live = true;
++        ensure().querySelector('.inv-body-label').textContent = (labels && labels[kind]) || LABELS[kind];
++        place();
++    });
++}
++
++/** Is (x, y) on the ring? */
++export function hit(x, y) {
++    if (!live || !point) return false;
++    return Math.hypot(x - point.x, y - point.y) <= RADIUS * scale();
++}
++
++/** The pointer moved: the ring lights while it is on it. */
++export function over(x, y) {
++    const on = hit(x, y);
++    setHot(on);
++    return on;
++}
++
++/** The drag is over. */
++export function end() {
++    session++;
++    const was = live;
++    live = false;
++    point = null;
++    setHot(false);
++    if (el) el.hidden = true;
++    if (was) nuiCallback('bodyTrack', { on: false });
++}
++
++/** Is a ring showing now? */
++export function active() {
++    return live;
++}
++
++NuiRouter.register('bodyPoint', (d) => {
++    if (!live || !d) return;
++    if (d.hidden) { live = false; setHot(false); if (el) el.hidden = true; return; }   // blocked mid-drag
++    point = { x: Number(d.x) * window.innerWidth, y: Number(d.y) * window.innerHeight };
++    place();
++});
++
++invEvents.on('close', () => end());
+diff --git a/html/js/core/inventory.js b/html/js/core/inventory.js
+index 7953c93..22c2c99 100644
+--- a/html/js/core/inventory.js
++++ b/html/js/core/inventory.js
+@@ -29,6 +29,7 @@ import * as invState from './inv-state.js';
+ import { invEvents } from './emitter.js';
+ import * as ops from './inv-ops.js';
+ import * as actions from './inv-actions.js';
++import * as body from './inv-body.js';
+ import { getItemDefs } from './item-defs.js';
+ import { whenMet } from './item-rules.js';
+ import { nuiCallback, itemImageUrl, setItemImage, decodeTextEntities } from '../utils.js';
+@@ -114,12 +115,12 @@ export function defaultSeated() {
+ // freely; change slots through `actions`, or through the ops contract by hand); `actions` is every
+ // player gesture as one call (core/inv-actions.js); `getItemDefs`/`itemImageUrl`/`setItemImage`/
+ // `whenMet`/`decodeTextEntities` are what a slot needs to be drawn; `ops` is the optimistic engine;
+-// `events` is the announcement stream; `slotConfig`/`isIgnitionKeyItem` are the server-registered
++// `body` is the ring over the player's character while dragging (core/inv-body.js); `events` is the announcement stream; `slotConfig`/`isIgnitionKeyItem` are the server-registered
+ // slot registries, and `slotTakesItem` a strip slot's rule; `nuiCallback` is the plain outbound wire. closeInventory is deliberately NOT here:
+ // inv-wire imports this file for the seat, so the renderer-loader passes it to custom renderers as
+ // `close` instead (keeps the graph a DAG). A custom renderer gets a COPY of this module from its loader,
+ // with its own `events` and `setViewRenderHook`, so swapping it out undoes what it subscribed.
+ export {
+-    inv, shop, invEvents as events, ops, actions, slotConfig, isIgnitionKeyItem, slotTakesItem,
++    inv, shop, invEvents as events, ops, actions, body, slotConfig, isIgnitionKeyItem, slotTakesItem,
+     nuiCallback, getItemDefs, itemImageUrl, setItemImage, whenMet, decodeTextEntities,
+ };
+diff --git a/html/js/inventory.js b/html/js/inventory.js
+index 0281d2f..8ab921a 100644
+--- a/html/js/inventory.js
++++ b/html/js/inventory.js
+@@ -14,6 +14,8 @@ import {
+ import { beginOp, extendOp, emit, commitOp, settleUnsentOp } from './core/inv-ops.js';
+ import { registerRenderer, getRenderer, defaultSeated, setViewRenderHook } from './core/inventory.js';
+ import { closeInventory } from './core/inv-wire.js';
++import * as body from './core/inv-body.js';
++import { equip, dropOut } from './core/inv-actions.js';
+ import { padGlyph } from './pad-glyphs.js';
+ import { pref } from './prefs.js';
+ import { weightText, weightLine } from './weight.js';
+@@ -1210,6 +1212,9 @@ function startDrag(item, slot, x, y) {
+ 
+     document.addEventListener('mousemove', onDragMove);
+     document.addEventListener('mouseup', onDragEnd);
++
++    // From the pockets, the ring over the character shows (core/inv-body.js): letting go on it equips or uses.
++    if (isPocketGrid(slot.dataset.container)) body.begin({ container: slot.dataset.container, slot: parseInt(slot.dataset.slot) });
+ }
+ 
+ function onDragMove(e) {
+@@ -1217,7 +1222,9 @@ function onDragMove(e) {
+     dragGhost.style.left = e.clientX + 'px';
+     dragGhost.style.top = e.clientY + 'px';
+ 
+-    const found = getSlotUnderCursor(e.clientX, e.clientY);
++    // On the ring, the ring is the target: no slot under it lights.
++    const onBody = body.over(e.clientX, e.clientY);
++    const found = onBody ? null : getSlotUnderCursor(e.clientX, e.clientY);
+     const target = (found && found !== dragSourceSlot) ? found : null;
+     if (target === dragHoverSlot) return;   // still over the same slot: nothing to redraw
+ 
+@@ -1365,8 +1372,26 @@ function dragEndBody(e) {
+     document.removeEventListener('mousemove', onDragMove);
+     document.removeEventListener('mouseup', onDragEnd);
+ 
++    // ON YOUR CHARACTER (Config.InventoryDragToBody): the ring is over the panels, so it is asked first.
++    if (body.hit(e.clientX, e.clientY)) {
++        const at = { container: dragSourceSlot.dataset.container, slot: parseInt(dragSourceSlot.dataset.slot) };
++        const r = equip(at);
++        if (!r.ok && r.reason) uiNotify({ text: r.reason, type: 'error', duration: 3000 });
++        cancelDrag();
++        return;
++    }
++
+     const target = getSlotUnderCursor(e.clientX, e.clientY);
+ 
++    // OUT OF THE INVENTORY (Config.InventoryDragOutDrops): let go of a pocket's item outside every panel, and it is
++    // dropped from the hand. Lua refuses it when the gesture is off, and the item stays where it was.
++    if (!target && !shop.open && isPocketGrid(dragSourceSlot.dataset.container) && outsidePanels(e.clientX, e.clientY)) {
++        dropOut({ container: dragSourceSlot.dataset.container, slot: parseInt(dragSourceSlot.dataset.slot) })
++            .then((r) => { if (!r.ok && r.reason) uiNotify({ text: r.reason, type: 'error', duration: 3000 }); });
++        cancelDrag();
++        return;
++    }
++
+     if (target && target !== dragSourceSlot) {
+         const fromContainer = dragSourceSlot.dataset.container;
+         const fromSlot      = parseInt(dragSourceSlot.dataset.slot);
+@@ -1882,7 +1907,14 @@ function dragEndBody(e) {
+     if (invHotbarHooks) invHotbarHooks.syncHotbar();
+ }
+ 
++/** Is (x, y) on none of the inventory's panels (the game shows there)? */
++function outsidePanels(x, y) {
++    const el = hitAt(x, y);
++    return !(el && el.closest('.inv-panel, .inv-accessory-panel, #inv-context-menu, .inv-tooltip'));
++}
++
+ function cancelDrag() {
++    body.end();
+     document.removeEventListener('mousemove', onDragMove);
+     document.removeEventListener('mouseup', onDragEnd);
+     if (dragItem) dragItem.classList.remove('dragging');
+diff --git a/shared/config_schema.lua b/shared/config_schema.lua
+index 22e71cb..1d2359c 100644
+--- a/shared/config_schema.lua
++++ b/shared/config_schema.lua
+@@ -489,6 +489,20 @@ ConfigSchema = {
+             { path = 'PlaceItemRange', type = 'number', min = 1, max = 20, step = 0.5, unit = 'm',
+               label = 'Placing reach',
+               help = 'How far from the camera a player can set an item down.' },
++            { path = 'InventoryDragToBody', type = 'bool',
++              label = 'Drag onto your character',
++              help = 'On: while dragging an item from their inventory, a ring shows over the player\'s own character, and letting go on it uses the item or equips it. Off: no ring.' },
++            { path = 'InventoryDragOutDrops', type = 'bool',
++              label = 'Drag out to drop',
++              help = 'On: letting go of an item outside the inventory\'s panels drops it. On foot the character puts it down, in a vehicle they toss it out of the window, even while moving, and it falls where it lands. Off: letting go there does nothing.' },
++            { path = 'InventoryDragOutInVehicle', type = 'bool',
++              shownWhen = { path = 'InventoryDragOutDrops', equals = true },
++              label = 'Drag out to drop from vehicles',
++              help = 'Off: only on foot. In a vehicle, letting go outside the panels does nothing (the glovebox and the ground panel still work).' },
++            { path = 'InventoryDragOutAnimated', type = 'bool',
++              shownWhen = { path = 'InventoryDragOutDrops', equals = true },
++              label = 'Drag out to drop: animated',
++              help = 'On: the character puts the item down, or tosses it out of the window, and it falls with physics. Off: it lands on a clear spot at once, as a drop onto the ground panel does.' },
+             { path = 'MaxGroundPilesPerDrop', type = 'int', min = 1, max = 200, unit = 'piles', sides = 'server',
+               label = 'Drop pile limit',
+               help = 'When a lot of items land on the ground at once (a big drop, or a full inventory spilling over), each stack becomes its own pile. This is the most piles one drop can make: past it, the items are shared out between that many piles, so the ground is not covered in them.' },
+diff --git a/types/client.lua b/types/client.lua
+index 8445273..36f88f2 100644
+--- a/types/client.lua
++++ b/types/client.lua
+@@ -124,6 +124,27 @@ function whip_core:UnblockHands(id) end
+ ---@return string? label
+ function whip_core:AreHandsBlocked(what) end
+ 
++--- Switch an inventory gesture off until UnblockInventoryGesture(id) or your resource stops: 'body' (drag onto your
++--- character), 'dropOut' (drag out of the inventory to drop), or nil for both. Clicking Use, the use keys and the
++--- ground panel keep working. `label` is what a player trying it is told.
++---@param id string
++---@param gesture 'body'|'dropOut'|nil
++---@param label string|nil
++---@return boolean ok
++---@return string? reason
++function whip_core:BlockInventoryGesture(id, gesture, label) end
++
++---@param id string
++---@return boolean ok
++---@return string? reason
++function whip_core:UnblockInventoryGesture(id) end
++
++--- May the player use an inventory gesture now (config.lua and every block)? False and the block's words when not.
++---@param gesture 'body'|'dropOut'
++---@return boolean allowed
++---@return string? why
++function whip_core:InventoryGestureAllowed(gesture) end
++
+ --- What the player's body is doing that work in the hands cannot be done in: under water (swimming under, or in a sunk
+ --- car), swimming, or falling (a fall, a skydive), the first that applies, and the words for it. False when none.
+ --- A progress bar takes the same states as `notWhile`.

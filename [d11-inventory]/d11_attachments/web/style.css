@@ -1,0 +1,164 @@
+/* Layout do d12-item-inspect (html/style.css) com as cores e fontes do tema D12 (tokens --ui-* do
+   whip_theme_d12; o segundo valor de cada var() e o mesmo do tema, para quando ele estiver desligado). */
+:root {
+    --a-ink:    var(--ui-text, #EBF2ED);
+    --a-dim:    var(--ui-text-mid, rgba(235, 242, 237, 0.68));
+    --a-faint:  var(--ui-text-dim, rgba(235, 242, 237, 0.42));
+    --a-panel:  var(--ui-surface, rgba(16, 20, 25, 0.88));
+    --a-line:   var(--ui-border, rgba(235, 242, 237, 0.10));
+    --a-hover:  var(--ui-surface-hover, rgba(235, 242, 237, 0.07));
+    --a-accent: var(--ui-accent, #009CE4);
+    --a-accent-light: var(--ui-accent-light, rgba(0, 156, 228, 0.16));
+    --a-danger: var(--ui-error, #ef655b);
+    --a-radius: var(--ui-radius-panel, 6px);
+    --a-shadow: var(--ui-shadow, 0 3px 12px rgba(0, 0, 0, 0.55));
+    --a-text-shadow: var(--ui-shadow-text, 0 1px 2px rgba(0, 0, 0, 0.6));
+    --a-font:   var(--ui-font, 'Segoe UI', sans-serif);
+    --a-display: var(--ui-font-display, 'Arial Narrow', sans-serif);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+    width: 100%; height: 100%;
+    overflow: hidden;
+    background: transparent;
+    font-family: var(--a-font);
+    color: var(--a-ink);
+    user-select: none;
+}
+
+.hidden { display: none !important; }
+
+#root { position: absolute; inset: 0; }
+
+#header { position: absolute; top: 4vh; left: 3vw; pointer-events: none; text-shadow: var(--a-text-shadow); }
+#title { font-family: var(--a-display); font-size: 11px; letter-spacing: 0.35em; color: var(--a-accent); }
+#label { font-family: var(--a-display); font-size: 26px; letter-spacing: 0.04em; margin-top: 2px; }
+#hint { margin-top: 6px; font-size: 12px; color: var(--a-dim); }
+
+#camera {
+    position: absolute; top: 4vh; right: 3vw;
+    background: var(--a-panel); color: var(--a-ink);
+    border: 1px solid var(--a-line); border-radius: var(--ui-radius-pill, 99px);
+    box-shadow: var(--a-shadow);
+    padding: 7px 16px; font: inherit; font-size: 12px; letter-spacing: 0.1em;
+    text-transform: uppercase; cursor: pointer;
+}
+#camera:hover { background: var(--a-accent-light); border-color: var(--a-accent); }
+
+/* Ponto de encaixe: ancora 0x0 no centro do marcador (translate3d em px inteiro vem do app.js). */
+.point { position: absolute; left: 0; top: 0; width: 0; height: 0; transition: opacity 120ms; will-change: transform; }
+.point.offscreen { opacity: 0; pointer-events: none; }
+
+.dot {
+    position: absolute; left: -7px; top: -7px;
+    width: 14px; height: 14px; border-radius: 50%;
+    border: 1.5px solid var(--a-ink);
+    background: rgba(16, 20, 25, 0.45);
+    box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.25);
+    cursor: pointer;
+    transition: transform 120ms, border-color 120ms;
+}
+.dot::after { content: ""; position: absolute; inset: 4px; border-radius: 50%; background: var(--a-ink); opacity: 0.6; }
+.point.focus .dot { transform: scale(1.35); border-color: var(--a-accent); }
+.point.focus .dot::after { background: var(--a-accent); opacity: 1; }
+
+.tag {
+    position: absolute; left: 7px; top: 0; transform: translateY(-50%);
+    padding: 4px 0 8px 8px;
+    display: flex; align-items: center; gap: 7px;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85);
+    white-space: nowrap;
+}
+.tag-txt { display: flex; flex-direction: column; line-height: 1.15; }
+.tag-ico {
+    width: 30px; height: 30px; object-fit: contain; flex: none;
+    background: var(--a-panel); border: 1px solid var(--a-line); border-radius: var(--ui-radius-sm, 5px);
+    padding: 2px;
+}
+
+/* Icone nas opcoes */
+.ico { width: 26px; height: 26px; object-fit: contain; flex: none; vertical-align: middle; }
+.opt .l { display: flex; align-items: center; gap: 9px; }
+.tag .name { font-family: var(--a-display); font-size: 11px; letter-spacing: 0.22em; color: var(--a-dim); }
+.tag .current { font-size: 13px; }
+.point.focus .tag .name { color: var(--a-accent); }
+
+/* Opcoes: so no ponto em foco. Sem backdrop-filter (bug do CEF). */
+.panel {
+    position: absolute; left: 4px; top: 26px;
+    min-width: 260px; max-width: 460px;
+    background: var(--a-panel);
+    border: 1px solid var(--a-line); border-left: 2px solid var(--a-accent);
+    border-radius: var(--a-radius);
+    box-shadow: var(--a-shadow);
+    padding: 5px 0;
+    display: none;
+}
+.point.focus .panel { display: block; }
+.point.busy .panel { opacity: 0.5; pointer-events: none; }
+
+.opt {
+    display: flex; justify-content: space-between; align-items: baseline; gap: 14px;
+    padding: 6px 12px; font-size: 13px; cursor: pointer;
+}
+.opt:hover { background: var(--a-hover); color: var(--a-accent); }
+.opt.detach { color: var(--a-danger); }
+.opt.detach:hover { color: var(--a-danger); }
+.opt.disabled, .opt.info { color: var(--a-faint); cursor: default; }
+.opt.disabled:hover { background: transparent; color: var(--a-faint); }
+.opt .l { white-space: nowrap; }
+.opt .h { font-size: 11px; color: var(--a-faint); white-space: nowrap; }
+.opt.empty { color: var(--a-faint); font-style: italic; cursor: default; }
+.opt.empty:hover { background: transparent; color: var(--a-faint); }
+
+/* Card da arma (canto inferior esquerdo, como o card do d12-item-inspect). */
+#card {
+    position: absolute; left: 3vw; bottom: 18vh;
+    width: 340px; max-height: 62vh; overflow: hidden;
+    background: var(--a-panel);
+    border: 1px solid var(--a-line); border-left: 2px solid var(--a-accent);
+    border-radius: var(--a-radius);
+    box-shadow: var(--a-shadow);
+    padding: 14px 16px 12px;
+    display: flex; flex-direction: column; gap: 10px;
+}
+.card-top { display: flex; gap: 12px; align-items: center; }
+.card-img {
+    width: 76px; height: 64px; flex: none;
+    background: var(--ui-slot-bg-filled, #171C22);
+    border-radius: var(--ui-radius-sm, 5px);
+    display: flex; align-items: center; justify-content: center;
+}
+.card-img img { max-width: 68px; max-height: 56px; object-fit: contain; }
+.card-head { min-width: 0; }
+.card-kind { font-family: var(--a-display); font-size: 10px; letter-spacing: 0.3em; color: var(--a-accent); text-transform: uppercase; }
+.card-name { font-family: var(--a-display); font-size: 18px; line-height: 1.15; margin-top: 2px; overflow-wrap: anywhere; }
+.card-desc { font-size: 12px; color: var(--a-dim); line-height: 1.4; }
+.card-rows { display: flex; flex-direction: column; }
+.card-rows .row {
+    display: flex; justify-content: space-between; align-items: baseline; gap: 12px;
+    padding: 5px 0; font-size: 12.5px; border-top: 1px solid var(--a-line);
+}
+.card-rows .row:first-child { border-top: 0; }
+.card-rows .k { color: var(--a-dim); white-space: nowrap; }
+.card-rows .v { text-align: right; overflow-wrap: anywhere; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.card-rows .row.mono .v { letter-spacing: 0.06em; }
+.card-rows .row.tone-bad .v { color: var(--a-danger); }
+.bar { display: block; width: 110px; height: 3px; background: var(--ui-death-track, rgba(235, 242, 237, 0.2)); border-radius: 99px; overflow: hidden; }
+.bar i { display: block; height: 100%; background: var(--a-accent); }
+.row.tone-bad .bar i { background: var(--a-danger); }
+.card-sec { font-family: var(--a-display); font-size: 10px; letter-spacing: 0.3em; color: var(--a-faint); text-transform: uppercase; }
+.card-parts { display: flex; flex-direction: column; gap: 4px; margin-top: -4px; }
+.part { display: flex; align-items: center; gap: 9px; font-size: 12.5px; }
+.part-ico { width: 28px; height: 28px; object-fit: contain; flex: none; }
+.part .pk { color: var(--a-dim); min-width: 84px; }
+.part .pv { margin-left: auto; text-align: right; }
+.part.none { color: var(--a-faint); font-style: italic; }
+
+/* Ponto fixado (clicado): marcador cheio e o menu fica ate clicar fora. */
+.dot, .tag { cursor: pointer; }
+.point.pinned .dot { border-color: var(--a-accent); background: var(--a-accent-light); }
+.point.pinned .panel { display: block; }
+.point.pinned { z-index: 2; }

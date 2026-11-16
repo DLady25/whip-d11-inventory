@@ -1,0 +1,104 @@
+D12: andar e dirigir com o inventario aberto, so no teclado (aplicar depois de whip_core-inventory-noblur-d11.patch).
+A pe: WASD e Shift; motorista: WASD e espaco; controle: tudo bloqueado (o analogico e do cursor). Camera: setr whip_inventory_drive_look 1.
+Aplicar em resources/: patch -p1 < whip_core-inventory-drive-d11.patch
+
+--- a/whip_core/client/controller.lua
++++ b/whip_core/client/controller.lua
+@@ -548,6 +548,15 @@
+ --- those panels hold NUI focus, so their keyboard and mouse were not reaching gameplay anyway.
+ local DRIVE_BLOCK = { all = true }
+ 
++-- D12: the driver keeps driving with the inventory open (client/inventory.lua, InventoryDriveKeys). The block lets
++-- the driving keys through, and is rebuilt when the device changes (the keys differ on a pad).
++local blockFor = nil   -- the device the padNav block was built for (true pad, false keyboard), nil: plain block
++local function padNavBlock()
++    local keys = InventoryDriveKeys and InventoryDriveKeys() or nil
++    blockFor = keys and padActive or nil
++    return keys and { all = true, except = keys } or DRIVE_BLOCK
++end
++
+ --- One frame of driving: the device, and the nav a pad sends.
+ local function DriveFrame()
+     -- Inline, not on the watcher's 200ms tick: the press about to be read below may be the very
+@@ -654,12 +663,17 @@
+ local function DriveHook()
+     if not ShouldDrive() then StopDriver() return end
+     DriveFrame()
++    -- D12: driving with the inventory open, and the device changed: the driving keys change with it.
++    if blockFor ~= nil and blockFor ~= padActive then
++        ControlBlocks.hold('padNav', padNavBlock(), DriveHook)
++        if InventoryDriveSync then InventoryDriveSync() end
++    end
+ end
+ 
+ local function RunDriver()
+     -- A panel taking the pad (not a scope change inside one already driven): its first frame carries what is held
+     if not driving then driving, carryNext = true, true end
+-    ControlBlocks.hold('padNav', DRIVE_BLOCK, DriveHook)
++    ControlBlocks.hold('padNav', padNavBlock(), DriveHook)
+ end
+ 
+ -- ============================================
+--- a/whip_core/client/inventory.lua
++++ b/whip_core/client/inventory.lua
+@@ -1026,6 +1026,39 @@
+     end
+ end)
+ 
++-- D12: andar e dirigir com o inventario aberto (docs/patches/whip_core-inventory-drive-d11.patch; o ox_inventory
++-- D12 fazia o mesmo). So no teclado: o foco guarda a entrada do jogo (keepInput) e o bloco 'invDrive' segura todo
++-- controle menos os de mover; o 'padNav' (client/controller.lua) solta os mesmos. A pe: WASD e Shift. Motorista:
++-- WASD e espaco. No controle nada passa (o analogico e do cursor). Camera (mouse): setr whip_inventory_drive_look 1.
++local MOVE_KEYS = { foot = { 21, 30, 31, 32, 33, 34, 35 }, drive = { 59, 60, 63, 64, 71, 72, 76 } }
++local invMoving = nil   -- 'foot' | 'drive' | nil, decidido ao abrir
++
++local function moveMode()
++    local ped = PlayerPedId()
++    if IsEntityDead(ped) == true or IsEntityDead(ped) == 1 then return nil end
++    local veh = GetVehiclePedIsIn(ped, false)
++    if veh == 0 then return 'foot' end
++    return GetPedInVehicleSeat(veh, -1) == ped and 'drive' or nil
++end
++
++--- As teclas de mover que o inventario aberto deixa passar agora ({} no controle), ou nil (nada a soltar).
++---@return integer[]|nil
++function InventoryDriveKeys()
++    if not invMoving then return nil end
++    if WhipPadActive then return {} end
++    local keys = { table.unpack(MOVE_KEYS[invMoving]) }
++    if GetConvarInt('whip_inventory_drive_look', 0) == 1 then keys[#keys + 1] = 1; keys[#keys + 1] = 2 end
++    return keys
++end
++
++--- Segura (ou solta) o bloco 'invDrive' conforme InventoryDriveKeys.
++function InventoryDriveSync()
++    local keys = InventoryDriveKeys()
++    -- 199/200 nomeados: o Esc e do inventario, nao abre o menu de pausa (client/pause.lua, heldByOthers).
++    if keys then ControlBlocks.hold('invDrive', { all = true, except = keys, controls = { 199, 200 } })
++    else ControlBlocks.release('invDrive') end
++end
++
+ --- Open the inventory UI with a NUI action + data, setting context. False if any UI is open (caller aborts) or items are locked.
+ ---@param action string   NUI action name
+ ---@param data table      NUI payload
+@@ -1046,7 +1079,10 @@
+     if data and data.inventory then _cachedInventory = data.inventory end
+     if data then UpdateItemFlags(data) end
+     -- D12: sem blur no jogo ao abrir o inventario (o fade-out do fechar fica: sem blur, nao faz nada).
+-    Focus.take('inventory')
++    -- D12: anda e dirige no teclado (InventoryDriveKeys): o foco guarda a entrada do jogo, o bloco solta so o mover.
++    invMoving = moveMode()
++    Focus.take('inventory', { keepInput = invMoving ~= nil })
++    InventoryDriveSync()
+ 
+     -- A panel in the context means the panel brought this screen up (see panelDrivenOpen).
+     panelDrivenOpen = not not (context and context.externalPanel)
+@@ -1342,6 +1378,8 @@
+         panelDrivenOpen = false
+         hideMenuPed()
+         TriggerScreenblurFadeOut(200)
++        invMoving = nil
++        InventoryDriveSync()
+         Focus.release('inventory')
+         SendNUIMessage({ action = 'closeInventory' })
+         -- Activity log's close marker, inside the UI-was-up guard (no phantom close on a bare release).

@@ -1,0 +1,108 @@
+--- a/whip_core/server/panels.lua
++++ b/whip_core/server/panels.lua
+@@ -248,7 +248,9 @@
+         source    = source,
+         container = container,
+         slot      = slot,
+-        addr      = { kind = 'player', id = source, sub = container, slot = slot },
++        -- D11: uma bolsa no chao e host com container 'ground' e slot = id da pilha (GroundItems).
++        addr      = container == 'ground' and { kind = 'ground', id = slot }
++            or { kind = 'player', id = source, sub = container, slot = slot },
+         item      = sd.item,
+         amount    = sd.amount,
+         metadata  = sd.metadata or {},
+@@ -801,6 +803,22 @@
+         return sd.metadata ~= nil and sd.metadata.uid == h.uid
+     end
+ 
++    -- D11: no chao, a pilha tem de estar ali, parada e ao alcance. Pegada pelo proprio jogador, o painel a segue
++    -- para os bolsos (busca pelo uid abaixo); levada por outro, longe ou no ar, some para este painel.
++    if h.container == 'ground' then
++        local g = GroundItems.getById(h.slot)
++        if g and not g.flight and isHost(g)
++            and IsPlayerNear(source, g.x, g.y, g.z, (Config.GroundItemPickupRange or 2.0) + 2.0) then
++            return panelHost(source, 'ground', h.slot, g)
++        end
++        if h.uid == nil then return nil end
++        local gc, gs = h.container, h.slot
++        h.container, h.slot = PlayerContainers[1], -1
++        local found = Panels.resolveHost(source, session)
++        if not found then h.container, h.slot = gc, gs end
++        return found
++    end
++
+     local slotData = Inventory.getSlot(player.inventory, h.container, h.slot)
+     if not isHost(slotData) then
+         -- Follow it around the player's own pockets: a bag dragged to another slot is the same bag,
+@@ -914,13 +932,21 @@
+         newMeta[session.host.storageKey] = session.items or {}
+     end
+ 
+-    Inventory.setSlot(player.inventory, host.container, host.slot,
+-        host.item, host.amount, newMeta)
++    local stored
++    if host.container == 'ground' then
++        -- D11: bolsa no chao. Grava na pilha (write-through no banco, redesenhada para quem esta perto).
++        local okG, whyG = GroundItems.setItem(host.slot, host.item, host.amount, newMeta)
++        if not okG then return false, whyG end
++        stored = GroundItems.getById(host.slot)
++    else
++        Inventory.setSlot(player.inventory, host.container, host.slot,
++            host.item, host.amount, newMeta)
++        stored = Inventory.getSlot(player.inventory, host.container, host.slot)
++    end
+ 
+     -- What the host holds NOW is what the panel last wrote, so it is the new baseline for
+     -- Panels.refreshFromHost. Read back through the projection rather than copied from the panel:
+     -- write() may add to what it was given (gunny mints a magazine's serial here).
+-    local stored = Inventory.getSlot(player.inventory, host.container, host.slot)
+     local after = stored and projectHost(reg, session.host.storageKey,
+         panelHost(source, host.container, host.slot, stored))
+     session.base = after and snapshotItems(after) or nil
+@@ -1293,6 +1319,46 @@
+ -- like any other move.
+ 
+ -- ============================================
++-- D11: abrir item-painel que esta no chao (bolsa largada, como o dropcontainer do ox_inventory D12)
++-- ============================================
++-- O renderer pede pelo id da pilha. Ao alcance, parada, e so um jogador por vez: dois paineis sobre a mesma pilha
++-- gravariam um por cima do outro.
++SecureEvent('whip_core:server:openGroundPanel', {
++    rateLimit = 500,
++    params = { {'groundItemId', 'id'} },
++}, function(source, player, groundItemId)
++    if not player.inventory then return end
++    local g = GroundItems.getById(groundItemId)
++    if not g or g.flight then return false, 'O item não existe mais' end
++    if not IsPlayerNear(source, g.x, g.y, g.z, (Config.GroundItemPickupRange or 2.0) + 2.0) then
++        return false, 'Longe demais'
++    end
++
++    local def = Config.Items[g.item]
++    local byItem = def and def.defaultAction and _panelItemActions[def.defaultAction]
++    local opener = byItem and byItem[g.item]
++    if not opener then
++        for _, list in pairs(_panelItemActions) do
++            if list[g.item] then opener = list[g.item] break end
++        end
++    end
++    if not opener then return false, 'Isso não abre' end
++
++    for src, mine in pairs(Panels._sessions) do
++        if src ~= source then
++            for _, s in pairs(mine) do
++                if s.host and s.host.container == 'ground' and s.host.slot == groundItemId then
++                    return false, 'Outra pessoa está mexendo nisso'
++                end
++            end
++        end
++    end
++
++    Log.ensureUid(g)   -- o painel segue a bolsa pelo uid se ela for pega (Panels.resolveHost)
++    opener(source, player, g, 'ground', groundItemId)
++end)
++
++-- ============================================
+ -- OpenPanel Close Event (client → server)
+ -- ============================================
+ 
