@@ -495,7 +495,38 @@ export default function createRenderer({ api, mount, close, addStylesheet, signa
     }
     function openGround(at) {
         const g = (inv().groundItems || {})[String(at.slot)];
-        if (g && g.groundId != null) post('openGround', { id: g.groundId });
+        if (!g || g.groundId == null) return;
+        post('openGround', { id: g.groundId })
+            .then((r) => (r && r.json ? r.json() : null))
+            .then((r) => { if (r && r.fallback) pickUpAndOpen(at, g); })
+            .catch(() => {});
+    }
+    // Sem o patch do whip_core (client/main.lua responde fallback): pega a bolsa do chao para os bolsos, como o
+    // Shift+clique, e quando o servidor confirmar abre ali pelo defaultAction dela.
+    function pickUpAndOpen(at, g) {
+        const action = (defs()[g.item] || {}).defaultAction;
+        const uid = g.metadata && g.metadata.uid;
+        const r = actions.quickMove(at);
+        run(r);
+        if (!r || !r.ok || !action) return;
+        const deadline = Date.now() + 3000;
+        const tryOpen = () => {
+            const pending = api.ops && api.ops.hasPendingOps && api.ops.hasPendingOps();
+            const at2 = pending ? null : pocketWith(g.item, uid);
+            if (at2) return run(actions.runOption(at2, action, {}));
+            if (Date.now() < deadline) setTimeout(tryOpen, 150);
+        };
+        setTimeout(tryOpen, 150);
+    }
+    function pocketWith(item, uid) {
+        for (const c of ['player', 'accessory']) {
+            const st = (inv().state || {})[c] || {};
+            for (const k in st) {
+                const d = st[k];
+                if (d && d.item === item && (uid == null || (d.metadata && d.metadata.uid === uid))) return addr(c, k);
+            }
+        }
+        return null;
     }
 
     // ---------------- render ----------------

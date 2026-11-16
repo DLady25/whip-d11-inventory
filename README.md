@@ -18,11 +18,11 @@ apply cleanly to whip_core 1.1.0.
 | `d11_bags` | Backpacks (`d11_bag_t1`, `d11_bag_t2`, `d11_bag_t3`) and a paper bag (`paperbag`) as inventory panels: open them from your pockets or straight from the ground, close a tab with its x, the bag being filled is highlighted. Bags are inventory only: they are not drawn on the player (`prop` is the model on the ground). |
 | `d11_attachments` | Weapon attachments in your hands: right-click a whip_gunny weapon, **Acessórios** (Attachments), and the character raises it in an inspect pose with a marker per mount point (sight, muzzle, barrel, grip, flashlight). Attach / remove from what you carry, no workbench needed. Same `metadata.attachments` as gunny's bench. |
 
-`whip_core-patches/`: whip_core is installed as is, so our changes to it ship as patches.
+`whip_core-patches/`: **all optional**, everything works without them. whip_core is installed as is, so our changes to it ship as patches.
 
 | Patch | Needed for |
 | --- | --- |
-| `whip_core-ground-panel-d11.patch` | **Required by d11_bags** to open a bag lying on the ground (`whip_core:server:openGroundPanel`). |
+| `whip_core-ground-panel-d11.patch` | Optional. Opens a bag lying on the ground in place. Without it, **Open** on a bag on the ground picks it up into your pockets and opens it there (d11_inventory finds out by itself). |
 | `whip_core-inventory-drag-gestures-upstream.patch` | Optional. Our PR to WHIP ([WHIPFX/whip_core#65](https://github.com/WHIPFX/whip_core/pull/65)): drag onto your character / drag out to drop in whip's **own** inventory, plus "a drop from a vehicle lands beside your door". Skip it once the PR is merged. `d11_inventory` works without it. |
 | `whip_core-inventory-noblur-d11.patch` | Optional: no screen blur when the inventory opens. |
 | `whip_core-inventory-drive-d11.patch` | Optional, apply after noblur: walk (WASD + Shift) and drive (WASD + Space) with the inventory open, keyboard only. Mouse look with `setr whip_inventory_drive_look 1`. |
