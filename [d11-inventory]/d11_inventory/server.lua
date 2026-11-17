@@ -10,3 +10,9 @@ RegisterNetEvent('d11_inventory:closePanel', function(id)
     if type(id) ~= 'string' or #id > 80 then return end
     exports.whip_core:ClosePanel(source, id)
 end)
+
+-- Encaixes de equipamento (D11Inventory.GearSlots): a faixa do whip_core recusa o item errado no servidor.
+for _, def in ipairs(D11Inventory.GearSlots or {}) do
+    local ok, why = exports.whip_core:RegisterAccessorySlot(def)
+    if not ok then print(('[d11_inventory] slot de equipamento %s (%s) recusado: %s'):format(def.slot, def.label, tostring(why))) end
+end

@@ -37,6 +37,20 @@ const KICKER = { glovebox: T('Porta-luvas'), trunk: T('Porta-malas'), boot: T('P
 const HOTBAR = 5;
 // Faixa de acessorios: 1-5 sao os do WHIP; 6+ a roupa vestida do d11_clothing, um encaixe por categoria
 const WORN_FROM = 6;
+// 17+: equipamento (D11Inventory.GearSlots no config.lua): radio, colete e armas
+const GEAR_FROM = 17;
+// Icone do encaixe vazio pelo `icon` do RegisterAccessorySlot (iconSvg do registro tem preferencia)
+const SVG = (d) => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">' + d + '</svg>';
+const SLOT_ICONS = {
+    phone: SVG('<rect x="7" y="3" width="10" height="18" rx="2"/><path d="M11 18h2"/>'),
+    cash: SVG('<rect x="3" y="7" width="18" height="10" rx="1.5"/><circle cx="12" cy="12" r="2.2"/>'),
+    vehicle_key: SVG('<circle cx="8" cy="15" r="4"/><path d="M11 12l8-8M16 7l2 2M14 9l2 2"/>'),
+    radio: SVG('<rect x="7" y="8" width="10" height="13" rx="1.5"/><path d="M9 8V3M10 12h4M10 15h4"/>'),
+    armour: SVG('<path d="M12 3l7 3v5c0 5-3 8-7 10-4-2-7-5-7-10V6z"/>'),
+    melee: SVG('<path d="M4 20l3-3M7 17l11-11 2-2-1 4L8 19z"/>'),
+    sidearm: SVG('<path d="M4 8h15v4H11l-1 3H7l1-3H4z"/><path d="M10 12l1 2"/>'),
+    rifle: SVG('<path d="M2 11h14l2-2h4v3h-6l-2 2H9l-1 3H5l1-3H2z"/>'),
+};
 const SHORT = { 'Acessório de pescoço': T('Pescoço') };
 // Pastas das fotos de roupa (CLOTHING_SLOTS de whip_core/html/js/utils.js)
 const CLOTHING_DIRS = {
@@ -361,17 +375,19 @@ export default function createRenderer({ api, mount, close, addStylesheet, signa
         return s;
     }
 
-    // Equipado: secao da ficha em dois grupos da faixa de acessorios do WHIP:
-    //   Acessorios (encaixes 1-5, ladrilho maior) e Roupa (6-16, a roupa vestida, ladrilho compacto numa linha)
+    // Equipado: secao da ficha com dois blocos da faixa de acessorios do WHIP, sem nome embaixo (nome no hover):
+    //   Equipado = encaixes 1-5 + divisor + equipamento (17+), numa linha; Roupa (6-16, compacta, com o nome embaixo)
     function equipSection() {
         const cfg = (api.slotConfig && api.slotConfig.accessorySlots) || [];
         if (!cfg.length) return null;
         const sec = div('d11-equip');
+        const base = cfg.filter((s) => s.slot < WORN_FROM);
+        const gear = cfg.filter((s) => s.slot >= GEAR_FROM);
         const groups = [
-            [T('Equipado'), cfg.filter((s) => s.slot < WORN_FROM), ''],
-            [T('Roupa'), cfg.filter((s) => s.slot >= WORN_FROM), ' worn'],
+            [T('Equipado'), base.concat(gear), '', base.length && gear.length ? base.length : 0],
+            [T('Roupa'), cfg.filter((s) => s.slot >= WORN_FROM && s.slot < GEAR_FROM), ' worn', 0],
         ];
-        for (const [title, list, cls] of groups) {
+        for (const [title, list, cls, splitAt] of groups) {
             if (!list.length) continue;
             const head = div('d11-sec-head');
             head.appendChild(div('d11-kicker', title));
@@ -381,21 +397,22 @@ export default function createRenderer({ api, mount, close, addStylesheet, signa
             sec.appendChild(head);
             const row = div('d11-equip-row' + cls);
             row.style.setProperty('--cols', String(list.length));
-            for (const s of list) {
-                const cell = div('d11-equip-cell');
+            list.forEach((s, i) => {
+                const cell = div('d11-equip-cell' + (splitAt && i === splitAt ? ' split' : ''));
                 const el = slotEl('accessory', s.slot, { small: true });
-                if (el.classList.contains('empty') && s.iconSvg) {
+                const svg = s.iconSvg || SLOT_ICONS[s.icon];
+                if (el.classList.contains('empty') && svg) {
                     const ic = div('d11-equip-icon');
-                    ic.innerHTML = s.iconSvg;
+                    ic.innerHTML = svg;
                     el.appendChild(ic);
                 }
-                cell.appendChild(el);
                 const label = s.label || T('Acessório');
-                const lab = span('d11-equip-label', SHORT[label] || label);
-                lab.title = label;
-                cell.appendChild(lab);
+                cell.title = SHORT[label] || T(label);
+                cell.appendChild(el);
+                // roupa vazia nao tem icone: o nome fica embaixo
+                if (cls) cell.appendChild(span('d11-equip-label', cell.title));
                 row.appendChild(cell);
-            }
+            });
             sec.appendChild(row);
         }
         return sec;

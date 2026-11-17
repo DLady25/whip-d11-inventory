@@ -14,7 +14,7 @@ apply cleanly to whip_core 1.1.0.
 
 | Resource | What it does |
 | --- | --- |
-| `d11_inventory` | Our inventory look as a WHIP renderer: a character card (name, account, cash, items, load), an "Equipped" section for the accessory strip, pockets and open bags as tabs, quick-access slots, a "Nearby" ground panel, glovebox / boot / stash / ignition, full gamepad support. **Drag an item onto your character** (the real one, in the world: it gets an outline in the theme colour) to use or equip it. **Drag an item out of the window** to drop it from your hand: on foot you put it down, in a vehicle you wind the window down and toss it out (while moving too), and it falls with physics where it lands. |
+| `d11_inventory` | Our inventory look as a WHIP renderer: a character card (name, account, cash, items, load), an "Equipped" section for the accessory strip (with optional radio, vest and weapon slots), pockets and open bags as tabs, quick-access slots, a "Nearby" ground panel, glovebox / boot / stash / ignition, full gamepad support. **Drag an item onto your character** (the real one, in the world: it gets an outline in the theme colour) to use or equip it. **Drag an item out of the window** to drop it from your hand: on foot you put it down, in a vehicle you wind the window down and toss it out (while moving too), and it falls with physics where it lands. |
 | `d11_bags` | Backpacks (`d11_bag_t1`, `d11_bag_t2`, `d11_bag_t3`) and a paper bag (`paperbag`) as inventory panels: open them from your pockets or straight from the ground, close a tab with its x, the bag being filled is highlighted. Bags are inventory only: they are not drawn on the player (`prop` is the model on the ground). |
 | `d11_attachments` | Weapon attachments in your hands: right-click a whip_gunny weapon, **Acessórios** (Attachments), and the character raises it in an inspect pose with a marker per mount point (sight, muzzle, barrel, grip, flashlight). Attach / remove from what you carry, no workbench needed. Same `metadata.attachments` as gunny's bench. |
 
@@ -64,6 +64,31 @@ exports.d11_inventory:GestureAllowed('dropOut')   -- true, or false and the reas
 A block is lifted by itself when the resource that set it stops. With the drag-gestures patch applied, whip_core's own
 settings and blocks (`Config.InventoryDragToBody`, `InventoryDragOutDrops`, `InventoryDragOutInVehicle`,
 `InventoryDragOutAnimated`, `exports.whip_core:BlockInventoryGesture`) are honoured too.
+
+### Equipment slots
+
+The accessory strip takes as many slots as you want, each one limited to the items you list
+(`exports.whip_core:RegisterAccessorySlot`, enforced on the server). `d11_inventory` ships five: **Radio**, **Vest**
+(`armour`), **Melee**, **Sidearm/SMG** and **Rifle** (whip_gunny items). They show in the "Equipped" row after a thin
+divider; names on hover, a line icon while empty. A weapon in one of them is drawn and used like one in the pockets.
+
+```lua
+D11Inventory.GearSlots = {
+    { slot = 17, label = 'Rádio',  accepts = 'radio',  icon = 'radio' },
+    { slot = 18, label = 'Colete', accepts = 'armour', icon = 'armour' },
+    -- ... melee, sidearm and rifle take lists of gunny_* items (see config.lua)
+}
+```
+
+They need room in the strip. In `whip_core/config.lua`:
+
+```lua
+Config.ContainerSlots = { player = 30, accessory = 21 }   -- 1-5 WHIP, 6-16 worn clothes, 17-21 equipment
+Config.MaxWeight      = { player = 80.0, accessory = 25.0 }
+```
+
+Slots 17 and up are drawn as equipment, so keep yours there (without whip-d11-clothing, 6-16 just stay unused).
+`D11Inventory.GearSlots = {}` turns them off.
 
 ## Language
 

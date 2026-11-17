@@ -13,7 +13,7 @@ export const LOCALES = {
         'Equipar': 'Equip', 'Usar': 'Use',
         // cabecalho, ficha, secoes
         'Inventário': 'Inventory', 'Crafting': 'Crafting', 'Comandos': 'Controls', 'Sem personagem': 'No character',
-        'Conta ': 'Account ', 'ID ': 'ID ', 'Em mãos': 'Cash', 'Itens': 'Items', 'Carga': 'Load', 'Equipado': 'Equipped',
+        'Conta ': 'Account ', 'ID ': 'ID ', 'Em mãos': 'Cash', 'Itens': 'Items', 'Carga': 'Load', 'Equipado': 'Equipped', 'Equipamento': 'Gear', 'Rádio': 'Radio', 'Colete': 'Vest', 'Arma branca': 'Melee', 'Pistola/Sub': 'Sidearm/SMG', 'Rifle': 'Rifle',
         'Mochila': 'Backpack', 'Bolsos': 'Pockets', 'Acesso rápido': 'Quick access', 'Slots 1-': 'Slots 1-',
         'Revista': 'Search', 'Jogador': 'Player', 'Ignição': 'Ignition', 'Somente leitura': 'Read only',
         'Enchendo': 'Filling', 'Aberta': 'Open', 'Aberto': 'Open', 'Painel': 'Panel', 'Fechar': 'Close',
