@@ -1,5 +1,8 @@
 # D11 Inventory for WHIP
 
+> **Installing?** Follow [INSTALL.md](INSTALL.md) (English and Português): the whole D11 set on a stock whip_core
+> 1.2.0, step by step, with the patch order, server.cfg and what to check in the console.
+
 The inventory we run on District 11 (D11), built on [WHIP](https://github.com/WHIPFX/whip_core)'s own inventory
 core. The renderer only draws: state, weights, rules and the server stay whip_core's, and every gesture goes through
 `api.actions` (whip_core `docs/nui-inventory.md`). Version 2 adds the **physical trunk and physical ground**
