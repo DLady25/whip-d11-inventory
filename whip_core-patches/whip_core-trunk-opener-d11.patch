@@ -1,0 +1,59 @@
+--- a/whip_core/client/vehicle_prompts.lua
++++ b/whip_core/client/vehicle_prompts.lua
+@@ -363,14 +363,31 @@
+                 end,
+                 act = function(veh)
+                     local back = backDoors(veh)
+-                    if not back then return Vehicles.toggleDoor(veh, 5) end
+-                    -- The pair together: shut if either is open, else open both.
+-                    local shut = backDoorsOpen(veh, back)
+-                    for _, i in ipairs(back.doors) do
+-                        if not doorTorn(veh, i) then
+-                            if shut then Vehicles.shutDoor(veh, i) else Vehicles.openDoor(veh, i) end
++                    if back then
++                        -- The pair together: shut if either is open, else open both.
++                        local shut = backDoorsOpen(veh, back)
++                        for _, i in ipairs(back.doors) do
++                            if not doorTorn(veh, i) then
++                                if shut then Vehicles.shutDoor(veh, i) else Vehicles.openDoor(veh, i) end
++                            end
+                         end
++                        return
+                     end
++                    -- D11 patch (docs/patches/whip_core-trunk-opener-d11.patch, LGPL): before the lid swings open,
++                    -- the resource in `setr whip_trunk_opener` may set the boot up first. Its export
++                    -- BeforeTrunkLid(entity) answers how many ms to wait (at most 1500); the lid opens after that.
++                    local opener = GetConvar('whip_trunk_opener', '')
++                    if not doorOpen(veh, 5) and opener ~= '' and GetResourceState(opener) == 'started' then
++                        local ok, wait = pcall(function() return exports[opener]:BeforeTrunkLid(veh) end)
++                        wait = ok and tonumber(wait) or 0
++                        if wait > 0 then
++                            SetTimeout(math.min(wait, 1500), function()
++                                if DoesEntityExist(veh) and not doorOpen(veh, 5) then Vehicles.toggleDoor(veh, 5) end
++                            end)
++                            return
++                        end
++                    end
++                    Vehicles.toggleDoor(veh, 5)
+                 end,
+                 press = true,
+             },
+@@ -389,7 +406,17 @@
+                     if back then return not backDoorsHung(veh, back) or backDoorsOpen(veh, back) end
+                     return not trunkLid(veh) or doorOpen(veh, 5)
+                 end,
+-                act = function(veh) Vehicles.openTrunk(veh) end,
++                act = function(veh)
++                    -- D11 patch (docs/patches/whip_core-trunk-opener-d11.patch, LGPL): a resource named by
++                    -- `setr whip_trunk_opener <resource>` may show the boot its own way. Its export
++                    -- OpenVehicleTrunk(entity) answers true when it took it; anything else falls back to this one.
++                    local opener = GetConvar('whip_trunk_opener', '')
++                    if opener ~= '' and GetResourceState(opener) == 'started' then
++                        local ok, took = pcall(function() return exports[opener]:OpenVehicleTrunk(veh) end)
++                        if ok and took == true then return end
++                    end
++                    Vehicles.openTrunk(veh)
++                end,
+                 press = true,   -- the hand towards the boot first (pressThen)
+             },
+         },

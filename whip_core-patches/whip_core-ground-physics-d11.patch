@@ -1,0 +1,93 @@
+--- a/whip_core/client/ground.lua
++++ b/whip_core/client/ground.lua
+@@ -538,8 +538,14 @@ local function keepFlyingPromptsFresh()
+     end)
+ end
+ 
++-- D11 patch (docs/patches/whip_core-ground-physics-d11.patch, LGPL): a resource may HOLD a pile's prop (HoldGroundProp)
++-- while it draws and moves the pile itself (d11_ptrunk: the pile as a physics object). Held, whip draws no prop and
++-- no prompt for it; let go, it is drawn again where the pile now lies.
++local groundHeld = {}   -- [id] = resource holding it
++
+ local function SpawnGroundProp(data)
+     if groundItemProps[data.id] or spawning[data.id] then return end  -- already spawned, or on its way
++    if groundHeld[data.id] then return end
+ 
+     -- Still flying (a throw): the pile is the thrower's networked object for now, so no
+     -- prop of our own — only its prompt, following that object so anyone in reach can grab it out of
+@@ -843,6 +849,32 @@ RegisterNetEvent('whip_core:client:groundItemUpdated', function(id, amount)
+     if onMyPanel(known) then RefreshNUIGroundItems() end
+ end)
+ 
++-- D11 patch (whip_core-ground-physics-d11): HoldGroundProp(id, true) takes the pile's prop and prompt off this
++-- screen until HoldGroundProp(id, false); a resource that stops lets go of everything it held.
++exports('HoldGroundProp', function(id, held)
++    id = tonumber(id)
++    if not id then return false end
++    if held then
++        groundHeld[id] = GetInvokingResource() or 'whip_core'
++        DespawnGroundProp(id)
++    else
++        groundHeld[id] = nil
++        local data = groundItemsData[id]
++        if data and not groundItemProps[id] and inStreamRange(data) then SpawnGroundProp(data) end
++    end
++    return true
++end)
++
++AddEventHandler('onResourceStop', function(res)
++    for id, holder in pairs(groundHeld) do
++        if holder == res then
++            groundHeld[id] = nil
++            local data = groundItemsData[id]
++            if data and not groundItemProps[id] and inStreamRange(data) then SpawnGroundProp(data) end
++        end
++    end
++end)
++
+ -- ============================================
+ -- Streaming Thread — grid-accelerated spawn/despawn
+ -- ============================================
+--- a/whip_core/server/ground.lua
++++ b/whip_core/server/ground.lua
+@@ -478,6 +478,40 @@ function GroundItems.settle(id, x, y, z, heading, placed)
+     return true
+ end
+ 
++--- D11 patch (docs/patches/whip_core-ground-physics-d11.patch, LGPL): a pile moved by a resource, keeping its id (the
++--- prompt and anything that knows the id follow). Like settle, without a flight: the row, the cache and every client
++--- that can see either spot move to the new pose, drawn exactly ({ rx, ry } tilt, as a placed pile).
++---@param id number
++---@param coords vector3|table
++---@param heading number|nil
++---@param rx number|nil
++---@param ry number|nil
++---@return boolean ok
++---@return string|nil err
++function GroundItems.move(id, coords, heading, rx, ry)
++    id = tonumber(id)
++    local data = id and GroundItems.cache[id]
++    if not data then return false, 'Item not found' end
++    if GroundItems._flights[id] then return false, 'Still flying' end
++    local x, y, z = tonumber(coords and coords.x), tonumber(coords and coords.y), tonumber(coords and coords.z)
++    if not (x and y and z) then return false, 'MoveGroundItem needs coords' end
++    rx, ry = tonumber(rx) or 0.0, tonumber(ry) or 0.0
++    local ok, err = pcall(MySQL.update.await,
++        'UPDATE `ground_items` SET `x` = ?, `y` = ?, `z` = ?, `heading` = ?, `placed` = 1, `rx` = ?, `ry` = ? WHERE `id` = ?',
++        { x, y, z, heading or 0.0, rx, ry, id })
++    if not ok then return false, tostring(err) end
++    if GroundItems.cache[id] ~= data then return false, 'Item not found' end   -- picked up while the write waited
++    local fromX, fromY = data.x, data.y
++    data.x, data.y, data.z = x, y, z
++    data.heading = heading or 0.0
++    data.placed, data.rx, data.ry = true, rx, ry
++    GroundItems.gridRemove(id)
++    GroundItems.gridInsert(id, x, y)
++    announceSettled(data, fromX, fromY)
++    return true
++end
++exports('MoveGroundItem', GroundItems.move)
++
+ -- THE WATCHDOG for throws whose thrower never says where they landed (a crash, a disconnect, the
+ -- object lost). After FLIGHT_MAX_MS, or as soon as the object or its thrower is gone, the pile is
+ -- settled where the server last saw it, snapped upright. Asleep while nothing is in the air.

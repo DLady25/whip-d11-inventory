@@ -1,0 +1,107 @@
+D11: as teclas 1-5 (barra do Tab e roda de atalhos do controle tambem) usam o slot que Config.HotbarSlots disser.
+Sem a config (nil), tudo igual ao WHIP: bolsos 1-5. O d11_inventory marca o numero da tecla no slot certo.
+Aplicar em resources/: patch -p1 < whip_core-hotbar-slots-d11.patch
+Depois, no whip_core/config.lua (abaixo de Config.AccessoryStrip):
+    Config.HotbarSlots = {
+        { container = 'accessory', slot = 19 },   -- 1: arma branca (d11_inventory GearSlots)
+        { container = 'accessory', slot = 20 },   -- 2: pistola/sub
+        { container = 'accessory', slot = 21 },   -- 3: rifle
+        { container = 'player', slot = 4 },       -- 4: bolso 4
+        { container = 'player', slot = 5 },       -- 5: bolso 5
+    }
+
+--- a/whip_core/server/inventory.lua
++++ b/whip_core/server/inventory.lua
+@@ -1650,7 +1650,8 @@
+     local keys = {}
+     for item in pairs(Inventory.IgnitionKeys) do keys[#keys + 1] = item end
+     table.sort(keys)
+-    return { accessorySlots = slots, ignitionKeys = keys }
++    -- D11: hotbar = Config.HotbarSlots, so the Tab bar and the hotkeys wheel draw what the number keys use
++    return { accessorySlots = slots, ignitionKeys = keys, hotbar = Config.HotbarSlots }
+ end
+ 
+ local function broadcastSlotDefs()
+--- a/whip_core/client/inventory.lua
++++ b/whip_core/client/inventory.lua
+@@ -2898,7 +2898,9 @@
+     WhipEmit('whip_core:hotbar:slotUsed', { slot = i })
+     -- A number key shows the hotbar briefly with the slot flashed.
+     if not quiet then SendNUIMessage({ action = 'useHotbarSlot', slot = i }) end
+-    TriggerServerEvent('whip_core:server:useItem', 'player', i)
++    -- D11: Config.HotbarSlots says which slot a key uses (an equipment slot); a key it leaves out, its own pocket slot
++    local t = Config.HotbarSlots and Config.HotbarSlots[i]
++    TriggerServerEvent('whip_core:server:useItem', t and t.container or 'player', t and t.slot or i)
+ end
+ 
+ -- Number keys 1-5: use hotbar slot (sends to server)
+--- a/whip_core/html/js/core/inv-state.js
++++ b/whip_core/html/js/core/inv-state.js
+@@ -196,12 +196,25 @@
+         { slot: 5, accepts: null, keys: true, label: 'Chave', icon: 'vehicle_key' },
+     ],
+     ignitionKeys: ['vehicle_key', 'hacked_vehicle_key'],
++    hotbar: null,   // D11: Config.HotbarSlots (null = pocket slots 1-5)
+ };
+ 
+ export function adoptSlotDefs(payload) {
+     if (!payload) return;
+     if (Array.isArray(payload.accessorySlots)) slotConfig.accessorySlots = payload.accessorySlots;
+     if (Array.isArray(payload.ignitionKeys)) slotConfig.ignitionKeys = payload.ignitionKeys;
++    // D11: Lua sends a table with holes as an object ({ "1": ... }), so read it by key either way
++    if ('hotbar' in payload) slotConfig.hotbar = payload.hotbar || null;
++    if (invHotbarHooks) invHotbarHooks.syncHotbar();
++}
++
++/** D11: what number key i (1-5) uses, as the item in it: Config.HotbarSlots' slot, or pocket slot i. */
++export function hotbarSlotData(i) {
++    const map = slotConfig.hotbar;
++    const t = map && (Array.isArray(map) ? map[i - 1] : map[String(i)]);
++    const container = (t && t.container) || 'player';
++    const slot = (t && t.slot) || i;
++    return inv.state && inv.state[container] && inv.state[container][String(slot)];
+ }
+ 
+ export function isIgnitionKeyItem(item) {
+--- a/whip_core/html/js/hotbar.js
++++ b/whip_core/html/js/hotbar.js
+@@ -10,7 +10,7 @@
+ import { NuiRouter } from './router.js';
+ import { setItemImage } from './utils.js';
+ import { invItemDefs } from './core/item-defs.js';
+-import { inv, invRegisterHotbarHooks } from './core/inv-state.js';
++import { inv, invRegisterHotbarHooks, hotbarSlotData } from './core/inv-state.js';
+ 
+ const SHOW_MS = 1000;    // a tap or a used slot
+ const MERGE_MS = 320;    // the segment closing out of the hint capsule (css: max-width 0.3s)
+@@ -35,7 +35,7 @@
+         const core = el && el.querySelector('.hb-core');
+         if (!core) continue;
+ 
+-        const slotData = inv.state.player && inv.state.player[String(i)];
++        const slotData = hotbarSlotData(i);   // D11: Config.HotbarSlots (equipment slots on 1-3)
+         const def = slotData && invItemDefs[slotData.item];
+ 
+         // UNCHANGED SLOTS ARE LEFT ALONE, keyed on the same item|amount signature refreshSlotVisuals uses.
+--- a/whip_core/html/js/ui.js
++++ b/whip_core/html/js/ui.js
+@@ -1,6 +1,6 @@
+ import { NuiRouter } from './router.js';
+ import { nuiCallback, escapeHtml as esc, setItemImage } from './utils.js';
+-import { inv } from './core/inv-state.js';            // the radial's hotkeys wheel: pocket slots 1-5
++import { inv, hotbarSlotData } from './core/inv-state.js';   // the radial's hotkeys wheel: what keys 1-5 use (D11)
+ import { invItemDefs } from './core/item-defs.js';
+ import { setCapsuleMode, capsuleMode, capsuleAvailable, onCapsuleFree } from './capsule.js';
+ import { loadingNow, onLoadingEnd } from './curtain.js';   // §1: notices wait out a load
+@@ -1991,10 +1991,9 @@
+      *  in it (or an item this page has no definition for, which the hotbar leaves empty too) is one
+      *  with no `item`. */
+     function radHotkeys() {
+-        const held = (inv.state && inv.state.player) || {};
+         const out = [];
+         for (let i = 1; i <= 5; i++) {
+-            const s = held[String(i)];
++            const s = hotbarSlotData(i);   // D11: Config.HotbarSlots
+             const def = s && invItemDefs[s.item];
+             if (!def) {
+                 out.push({ slot: i, item: null, label: 'Vazio', desc: '' });

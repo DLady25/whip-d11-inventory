@@ -2,6 +2,19 @@
 --
 -- Language (every D11 resource): setr d11_locale en | pt-BR in server.cfg. Default: en.
 --
+-- How the open inventory behaves in the world. These are our defaults; flip one to get WHIP's own behaviour back.
+-- d11_inventory hands them to whip_core (patches noblur and drive) and d11_ptrunk as replicated convars when it
+-- starts: change them here and restart the server (not in server.cfg).
+D11Inventory_World = {
+    Blur     = false,  -- screen blur behind the open inventory (WHIP's own: true). Needs the noblur patch
+    Move     = true,   -- walk (WASD + Shift) and drive (WASD + Space) with it open, keyboard only. Needs the drive patch
+    MoveLook = false,  -- ...and turn the game camera with the mouse while doing it
+    Trunk    = true,   -- physical trunk (d11_ptrunk): false opens WHIP's plain trunk list. A car with no calibrated area
+                       -- (d11_ptrunk/data/profiles) always opens the plain one
+    Ground   = true,   -- physical ground (d11_ptrunk): items on the ground as physics objects with the inventory open
+    Camera   = true,   -- the orbit camera around you with the inventory open (right / middle drag, wheel; d11_ptrunk)
+}
+--
 -- The inventory gestures are EXTRAS: clicking Use (double click, the item menu), the use keys (1-5), dragging onto
 -- the "Nearby" ground panel and shift-click always work, whatever is set here. false switches a gesture off
 -- (letting go there does nothing).

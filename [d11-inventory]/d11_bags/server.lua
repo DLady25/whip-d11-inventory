@@ -54,7 +54,9 @@ Whip.register(function()
         local ok, why = Whip.core:RegisterItem(key, {
             name = bag.name, desc = bag.desc, weight = bag.weight,
             type = 'accessory', stack = false, maxStack = 1, usable = false, cooldown = 0,
-            image = ('html/img/items/%s.png'):format(key),
+            -- sem o arquivo, o icone padrao do WHIP (o pacote publico nao traz os icones das caixas)
+            image = LoadResourceFile(GetCurrentResourceName(), ('html/img/items/%s.png'):format(key))
+                and ('html/img/items/%s.png'):format(key) or nil,
             prop = bag.prop,
             defaultAction = D11BagsAction,
             contextOptions = { { action = D11BagsAction, label = D11BagsText.open } },

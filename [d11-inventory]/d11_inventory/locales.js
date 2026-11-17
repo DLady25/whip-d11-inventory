@@ -19,6 +19,8 @@ export const LOCALES = {
         'Enchendo': 'Filling', 'Aberta': 'Open', 'Aberto': 'Open', 'Painel': 'Panel', 'Fechar': 'Close',
         'Por perto': 'Nearby', 'Chão': 'Ground', 'Abrir': 'Open',
         // dica e menu
+        // municao e pentes (client/ammo.lua)
+        'Essa munição não serve nesse pente.': 'This ammo does not fit that magazine.', 'Carregar todos os pentes': 'Load all magazines',
         'Quantidade': 'Amount', 'Peso': 'Weight', ' cada)': ' each)', 'Esse item não tem uso.': 'This item has no use.',
         // ajuda (?)
         'Mouse e teclado': 'Mouse & keyboard', 'Arrastar': 'Drag', 'Mover o item': 'Move the item',
@@ -39,6 +41,20 @@ export const LOCALES = {
         'Enviar': 'Send', 'Opções': 'Options',
         // fantasma do arrasto (style.css le de data-label)
         'Largar no chão': 'Drop on the ground', 'Soltar para usar': 'Release to use',
+        // porta-malas fisico (d11_ptrunk)
+        'Guardar no porta-malas': 'Store in the trunk', 'O porta-malas está cheio.': 'The trunk is full.',
+        'Retirar': 'Take out', 'Inspecionar': 'Inspect', 'Posicionar com o teclado': 'Position with the keyboard',
+        'Endireitar': 'Straighten', 'Luz': 'Light', 'Grade': 'Grid', 'Destaques': 'Highlights', 'Gizmo': 'Gizmo', 'Ocultar HUD': 'Hide HUD', 'Câmera': 'Camera', 'Não cabe mais nada aí.': 'Nothing more fits in there.', 'Guardar em': 'Put in',
+        'Voltar a câmera para a vista inicial': 'Reset the camera to the starting view', 'Atalhos': 'Shortcuts',
+        'Arrastar': 'Drag', 'Mover objeto · fora do porta-malas: chão': 'Move object · outside the trunk: ground',
+        'Clique': 'Click', 'Selecionar objeto': 'Select object', 'Duplo clique': 'Double click',
+        'Abrir bolsa ou caixa': 'Open bag or box', 'Mover o selecionado': 'Move the selected one',
+        'Subir / descer': 'Raise / lower', 'Girar': 'Rotate', 'Botão direito': 'Right button',
+        'Opções · arrastando: girar câmera': 'Options · dragging: rotate camera',
+        'Meio · Shift+direito': 'Middle · Shift+right', 'Mover o foco': 'Move the focus', 'Roda': 'Wheel',
+        'Solte para retirar': 'Release to take out',
+        'Guardar nos bolsos': 'Put in pockets', 'Guardar aqui': 'Put here', 'Mover para cá': 'Move here',
+        'R/F: altura · Q/E: girar (Shift/Ctrl: outro eixo)': 'R/F: height · Q/E: rotate (Shift/Ctrl: other axis)',
     },
 };
 

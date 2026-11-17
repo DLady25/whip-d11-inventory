@@ -11,12 +11,13 @@ import { LOCALES, NUMBER_LOCALE } from './locales.js';
 // Idioma: setr d11_locale en | pt-BR no server.cfg (padrao en), lido pelo client/main.lua deste resource. O renderer
 // e importado pela pagina do whip_core logo cedo: tenta por ate ~5 s, enquanto o client deste resource sobe. Cada
 // tentativa tem prazo: uma resposta que nunca chega nao pode prender o import (o WHIP nao poe prazo nele).
+let HAS_CRAFT = false;   // d11_craft rodando (resposta do locale)
 const LANG = await (async () => {
     for (let i = 0; i < 8; i++) {
         try {
             const ask = fetch('https://d11_inventory/locale', { method: 'POST', body: '{}' }).then((r) => r.json());
             const j = await Promise.race([ask, new Promise((ok) => setTimeout(() => ok(null), 400))]);
-            if (j && typeof j.lang === 'string') return j.lang;
+            if (j && typeof j.lang === 'string') { HAS_CRAFT = j.craft === true; return j.lang; }
         } catch (e) { /* o client ainda nao subiu */ }
         await new Promise((ok) => setTimeout(ok, 250));
     }
@@ -41,15 +42,24 @@ const WORN_FROM = 6;
 const GEAR_FROM = 17;
 // Icone do encaixe vazio pelo `icon` do RegisterAccessorySlot (iconSvg do registro tem preferencia)
 const SVG = (d) => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">' + d + '</svg>';
+// Silhuetas das armas do HUD (d11_hud ui/weapons), embutidas e pintadas pela cor do slot com mascara CSS: sem arquivo
+// para carregar (a pagina e a do whip_core) e na mesma cor apagada dos outros icones.
+const GEAR_MASK = {
+    melee: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAKAAAAAfCAQAAADKWg4GAAAEEklEQVR42u2aT2hcVRTGf/fPS1Jbm05DSkItndo2rSlIG6NCTErsFLtRULuIdCMVoqCudCOKiFCqoEvBTRUXKnWlFW3dqEGoxZWIRMHuWlGjxdSFNJ159x4Xc+fNvJlJTBNnMolzZzPvzH3v8r57zj3f+c4oYc0MhcI3fdE1BOCKDL1G3sMAj/BeG8Clhy+Mc6QN4FKHQ3OQ35u/sF3WnrfOQeTZzV6+a10AFTqAJngEaKXsIwiHUcQN31aVxKwrImAXcYPCIbiqXyJsy4BoyJMLUDZ6q3wFNrIwgEXoisD1cis7ybCDLBk24tnEuuazrnm32bMFMKgG+qAmZoBjeBSOt/gVhdTngQodAnUzI4xyF7fTswpSyTV+avA29dEXrn7gPn6pT6RN8Lr9HOdhbkk5r6BaLIE0m08Uz9mYTk7wItbW8T2H4SEmyWEAjw8noVkFPugbfljYZKUxwNsaOuA4wkmGAtoGvaq4om7iSh0oRFfBZ3mFzxjC4RBsSwZrq1Q+3RjEpuDr5TSH8KG2bI9/ozQVPFDh6eUswxSI2tgsvhaziZLWxUdt+G4wHydE2hDzBiNcx9ZUHKplictKh+9VHNoG+I7zGNC5AD3wAUzVBjMtJhgcOd7GcYnLzKKZ4wpCxBYU3fSwmV6iFEFwSOCGbQDx3MQ9PMkFLvJ3nRkRXWxlgD0MsontZMlU5GiHoP+nXimlnohO+LuqIaK+St/Q9JAlyz4OMJSUeaV58we4x1dR8mKFY2qUjrRfOwRTY5mf3EszMm8QcL9mFF2shRUGj9RdXiXACKRSzM3sYT93coBdZCpekHmD29d5camZ6+ts48KWWpgbK2cpYjo4xSTmRrtyZTh9Rd3Zz20MM8wdbA8+JbjklBTgPJ9ymFyAS1Cc5wxjPBCuBMUsp9A8wYbEMscHXGKSvgCYoJjiK8Y5WAFh+ZtQaDB8nRXKzyjfopbT1iwFbNkr1zHAGPdyN1sTWwHFDLuYA57ldfIoFHPs4AqQ4x36cXgsr/E8sJd3GaKAYPiYo0Afb/Ig19EorpHlT+AFTpBHI2gMZ5hmgp1McxTdsDDWxIzwKDEKz6t8EUS//+CjxIgVk1x3y7i8JF/Kz1IaT4uVSJDTieU5sdIlyP2J5TfZJh2C7BMfLF6GJRIkI3+k7osEOZdYTgqCfCgi3whN/ChBltFUSru2S3xS4/mLKaZ4mQy7GaULy9Wg7DzD9wieiBliHIZPeJx+CsB6MlzGMs0Eg+QR1rORAhGzTDBGHrDMhCc9xTFiOrnI+9hExdTNyb2oknTWmH8mlDspi5krS7DUth4+5xA/Mrh62pqL98i0xVTNqYwCF/p95Yzqgw5etpTu0xVP1sAFLNMroCi0/xvTih7IimnRTe8T/gOuL+HIrOBKewAAAABJRU5ErkJggg==',
+    sidearm: 'data:image/png;base64,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',
+    rifle: 'data:image/png;base64,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',
+};
+const GEAR_PNG = (name) => '<span class="d11-equip-png" style="-webkit-mask-image:url(' + GEAR_MASK[name] + ');mask-image:url(' + GEAR_MASK[name] + ')"></span>';
 const SLOT_ICONS = {
     phone: SVG('<rect x="7" y="3" width="10" height="18" rx="2"/><path d="M11 18h2"/>'),
     cash: SVG('<rect x="3" y="7" width="18" height="10" rx="1.5"/><circle cx="12" cy="12" r="2.2"/>'),
     vehicle_key: SVG('<circle cx="8" cy="15" r="4"/><path d="M11 12l8-8M16 7l2 2M14 9l2 2"/>'),
     radio: SVG('<rect x="7" y="8" width="10" height="13" rx="1.5"/><path d="M9 8V3M10 12h4M10 15h4"/>'),
     armour: SVG('<path d="M12 3l7 3v5c0 5-3 8-7 10-4-2-7-5-7-10V6z"/>'),
-    melee: SVG('<path d="M4 20l3-3M7 17l11-11 2-2-1 4L8 19z"/>'),
-    sidearm: SVG('<path d="M4 8h15v4H11l-1 3H7l1-3H4z"/><path d="M10 12l1 2"/>'),
-    rifle: SVG('<path d="M2 11h14l2-2h4v3h-6l-2 2H9l-1 3H5l1-3H2z"/>'),
+    // faca, pistola e rifle: as mesmas silhuetas do HUD de armas (d11_hud, ui/weapons), embutidas em GEAR_MASK
+    melee: GEAR_PNG('melee'),
+    sidearm: GEAR_PNG('sidearm'),
+    rifle: GEAR_PNG('rifle'),
 };
 const SHORT = { 'Acessório de pescoço': T('Pescoço') };
 // Pastas das fotos de roupa (CLOTHING_SLOTS de whip_core/html/js/utils.js)
@@ -218,6 +228,7 @@ export default function createRenderer({ api, mount, close, addStylesheet, signa
         el.addEventListener('contextmenu', (e) => { e.preventDefault(); if (!drag || !drag.active) openMenu(at, e.clientX, e.clientY); });
         el.addEventListener('dblclick', () => {
             if (container === 'ground' && opensAsPanel(d)) return openGround(at);
+            if (container === 'container' && opensAsPanel(d)) return openStore(at);
             run(actions.use(at));
         });
         el.addEventListener('mouseenter', (e) => showTip(at, e));
@@ -226,13 +237,24 @@ export default function createRenderer({ api, mount, close, addStylesheet, signa
         return el;
     }
 
+    // A tecla (1-5) que usa este slot: Config.HotbarSlots do whip_core (patch hotbar-slots: 1-3 nas armas do
+    // equipamento), ou, sem ele, os bolsos 1-5. null = nenhuma.
+    function keyOf(container, slot) {
+        const map = api.slotConfig && api.slotConfig.hotbar;
+        for (let i = 1; i <= HOTBAR; i++) {
+            const t = map && (Array.isArray(map) ? map[i - 1] : map[String(i)]);
+            if (((t && t.container) || 'player') === container && ((t && t.slot) || i) === slot) return i;
+        }
+        return null;
+    }
+
     function grid(container, count, cols, opts) {
         const g = div('d11-grid');
         g.style.setProperty('--cols', String(cols));
-        // bolsos 1-5: numero da tecla de uso rapido no canto (o cartao "Acesso rapido" saiu)
+        // numero da tecla de uso rapido no canto do slot que ela usa (o cartao "Acesso rapido" saiu)
         for (let s = 1; s <= count; s++) {
-            const key = container === 'player' && s <= HOTBAR ? { key: s } : null;
-            g.appendChild(slotEl(container, s, key ? Object.assign({}, opts, key) : opts));
+            const k = keyOf(container, s);
+            g.appendChild(slotEl(container, s, k ? Object.assign({}, opts, { key: k }) : opts));
         }
         return g;
     }
@@ -287,7 +309,7 @@ export default function createRenderer({ api, mount, close, addStylesheet, signa
         craft.addEventListener('click', () => {
             fetch('https://d11_craft/openFromInventory', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).catch(() => {});
         });
-        ctrls.appendChild(craft);
+        if (HAS_CRAFT) ctrls.appendChild(craft);
         const help = document.createElement('button');
         help.className = 'd11-pill-btn' + (helpOpen ? ' on' : '');
         help.textContent = '?';
@@ -404,10 +426,10 @@ export default function createRenderer({ api, mount, close, addStylesheet, signa
             row.style.setProperty('--cols', String(list.length));
             list.forEach((s, i) => {
                 const cell = div('d11-equip-cell' + (splitAt && i === splitAt ? ' split' : ''));
-                const el = slotEl('accessory', s.slot, { small: true });
+                const el = slotEl('accessory', s.slot, { small: true, key: keyOf('accessory', s.slot) });
                 const svg = s.iconSvg || SLOT_ICONS[s.icon];
                 if (el.classList.contains('empty') && svg) {
-                    const ic = div('d11-equip-icon');
+                    const ic = div('d11-equip-icon' + (svg.includes('d11-equip-png') ? ' png' : ''));
                     ic.innerHTML = svg;
                     el.appendChild(ic);
                 }
@@ -449,6 +471,14 @@ export default function createRenderer({ api, mount, close, addStylesheet, signa
             const c = card('d11-external');
             const slots = def.slots || 20;
             c.appendChild(gridHeader(KICKER[def.type] || T('Armazenamento externo'), def.name || T('Armazenamento'), 'container', slots, usedSlots(i.containerItems)));
+            // Com uma bolsa ou caixa aberta, a grade do store encolhe (rola por dentro) para o painel dela aparecer sem
+            // descer a coluna: senao parece que nao abriu.
+            if ((i.panels || []).length) c.classList.add('d11-compact');
+            if (pt.on) {
+                c.classList.add('d11-pt-card');   // nao 'pt-card': o whip_core usa esse nome (property-themes.css, com hover)
+                c.appendChild(ptTools());
+                if (pt.help) c.appendChild(ptKeys());
+            }
             c.appendChild(grid('container', slots, 5));
             out.push(c);
         }
@@ -532,6 +562,17 @@ export default function createRenderer({ api, mount, close, addStylesheet, signa
             .then((r) => { if (r && r.fallback) pickUpAndOpen(at, g); })
             .catch(() => {});
     }
+    // Bolsa ou caixa dentro do porta-malas ou da stash aberta: abre ali (patch whip_core-store-panel-d11); sem o patch
+    // (fallback), pega para os bolsos e abre ali, como no chao.
+    function openStore(at) {
+        const i = inv();
+        const d = actions.slotAt(at.container, at.slot);
+        if (!d || i.containerStoreId == null) return;
+        post('openStore', { store: String(i.containerStoreId), slot: at.slot })
+            .then((r) => (r && r.json ? r.json() : null))
+            .then((r) => { if (r && r.fallback) pickUpAndOpen(at, d); })
+            .catch(() => {});
+    }
     // Sem o patch do whip_core (client/main.lua responde fallback): pega a bolsa do chao para os bolsos, como o
     // Shift+clique, e quando o servidor confirmar abre ali pelo defaultAction dela.
     function pickUpAndOpen(at, g) {
@@ -560,6 +601,597 @@ export default function createRenderer({ api, mount, close, addStylesheet, signa
         return null;
     }
 
+    // ---------------- porta-malas fisico (d11_ptrunk) ----------------
+    // Com um porta-malas aberto, pergunta ao d11_ptrunk se ele esta no modo fisico daquele carro (camera atras do
+    // carro, itens como objetos). Ligado: sem o escurecido do fundo, o espaco entre as colunas mostra o porta-malas e
+    // soltar ali guarda no porta-malas; o conteudo vai para o Lua montar os objetos. Sem o resource, nada muda.
+    const pt = { on: false, polling: false, sig: null, state: { light: true, grid: false, highlights: false, gizmo: false, hud: false }, help: false };
+    function ptPost(name, body) {
+        return fetch('https://d11_ptrunk/' + name, {
+            method: 'POST', headers: { 'Content-Type': 'application/json; charset=UTF-8' }, body: JSON.stringify(body || {}),
+        }).then((r) => r.json()).catch(() => null);
+    }
+    function ptStore() {
+        const i = inv();
+        const id = i && i.open && i.containerOpen ? String(i.containerStoreId || '') : '';
+        return /^vehicle:\d+:trunk$/.test(id) ? id : null;
+    }
+    function ptSet(on) {
+        if (pt.on === on) return;
+        pt.on = on;
+        pt.sig = null;
+        mount.classList.toggle('d11pt', on);
+        document.documentElement.classList.toggle('d11pt', on);
+        ptWorldReset();
+        if (on) ptSync();
+        queueMicrotask(render);   // o cabecalho do porta-malas entra ou sai
+    }
+    function ptPoll() {
+        const store = ptStore();
+        if (!store) { pt.polling = false; ptSet(false); return; }
+        ptPost('mode', { store }).then((r) => {
+            if (ptStore() !== store) { pt.polling = false; ptSet(false); return; }
+            const on = !!(r && r.active);
+            if (on) {
+                const s = ptStateOf(r);
+                const changed = JSON.stringify(s) !== JSON.stringify(pt.state);
+                pt.state = s;
+                if (changed && pt.on) queueMicrotask(render);
+            }
+            ptSet(on);
+            if (on) ptSync();
+            setTimeout(ptPoll, 400);
+        });
+    }
+    function ptSync() {
+        if (!pt.on) return;
+        const items = [];
+        const ci = inv().containerItems || {};
+        for (const k in ci) {
+            const d = ci[k];
+            if (d && d.item) items.push({ slot: Number(k), item: d.item, amount: d.amount || 1, uid: d.metadata && d.metadata.uid != null ? d.metadata.uid : null });
+        }
+        items.sort((a, b) => a.slot - b.slot);
+        const sig = JSON.stringify(items);
+        if (sig === pt.sig) return;
+        pt.sig = sig;
+        // Recusado (o modo fisico ainda nao estava ativo): esquece a assinatura, o proximo ptPoll manda de novo.
+        ptPost('items', { items }).then((r) => { if (!(r && r.ok) && pt.sig === sig) pt.sig = null; });
+    }
+    function ptRender() {
+        if (ptStore()) {
+            if (!pt.polling) { pt.polling = true; ptPoll(); }
+            ptSync();
+        } else if (pt.on) ptSet(false);
+    }
+    // Soltar um item dos bolsos no meio da tela: vai para o primeiro slot livre do porta-malas, e o objeto nasce onde
+    // o mouse soltou (o Lua guarda o ponto para aquele slot antes do movimento chegar).
+    function isPanelKey(c) { return typeof c === 'string' && c.indexOf('panel:') === 0; }
+    // O primeiro slot livre de uma bolsa aberta (aba do painel), ou null se cheia.
+    function freePanelSlot(key) {
+        const p = (inv().panels || []).find((q) => q.key === key);
+        if (!p) return null;
+        const items = p.items || {};
+        for (let s = 1; s <= (p.slots || 0); s++) if (!items[s] && !items[String(s)]) return s;
+        return null;
+    }
+    // A aba da direita sob (x, y), pelo retangulo de cada uma (nao pelo elemento sob o cursor): { card, key } ou null.
+    function rightCardAt(x, y) {
+        for (const card of root.querySelectorAll('.d11-right .d11-card')) {
+            const r = card.getBoundingClientRect();
+            if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) return { card, key: card.dataset.panel || null };
+        }
+        return null;
+    }
+    // O slot da bolsa `key` onde soltar em (x, y): o slot sob o cursor, senao o primeiro livre.
+    function panelSlotAt(key, x, y) {
+        const at = targetAt(x, y);
+        return at && at.container === key ? at.slot : freePanelSlot(key);
+    }
+    function ptDeposit(at, x, y) {
+        const i = inv();
+        const slots = (i.containerDef && i.containerDef.slots) || 0;
+        const ci = i.containerItems || {};
+        for (let s = 1; s <= slots; s++) {
+            if (!ci[s] && !ci[String(s)]) {
+                ptPost('place', { slot: s, x: x / innerWidth, y: y / innerHeight });
+                return run(actions.move(at, { container: 'container', slot: s }));
+            }
+        }
+        notify(T('O porta-malas está cheio.'));
+        render();
+    }
+    api.events.on('close', () => {
+        if (pt.on) ptPost('closed');
+        ptSet(false);
+    });
+
+    // ---- os objetos no porta-malas (d11_ptrunk, client/edit.lua): o mouse no meio da tela e as teclas vao para o Lua.
+    // Passar o mouse mostra a dica do item; clicar e arrastar move o objeto; soltar no painel do jogador retira;
+    // botao direito abre as opcoes; WASD, R/F, Q/E, Shift, Ctrl e Backspace vao para o objeto selecionado.
+    const wd = { pending: null, inflight: false, hover: null, last: null, down: null, grab: null, keys: {},
+        overTrunk: false, orbit: null, orbitAcc: { dx: 0, dy: 0 }, orbitBusy: false, groundTag: null,
+        panAcc: { dx: 0, dy: 0 }, panBusy: false };
+    function ptFree(x, y) {
+        const el = document.elementFromPoint(x, y);
+        return !(el && el.closest && el.closest('.d11inv .d11-card, .d11inv .d11-menu, .d11inv .d11-help'));
+    }
+    function ptOverLeft(x, y) {
+        const el = document.elementFromPoint(x, y);
+        return !!(el && el.closest && el.closest('.d11inv .d11-left'));
+    }
+    function ptWithdrawHint(on) {
+        const left = root.querySelector('.d11-left');
+        if (!left) return;
+        left.dataset.hint = T('Solte para retirar');
+        left.classList.toggle('pt-withdraw', on);
+    }
+    // Arrastando um objeto (do porta-malas ou do chao) por cima das abas da direita: a bolsa ou caixa sob o cursor acende
+    // e a etiqueta diz que vai para ela; no proprio porta-malas, nada (volta). Devolve a aba sob o cursor, ou null.
+    function ptBagHint(e) {
+        const rc = e ? rightCardAt(e.clientX, e.clientY) : null;
+        root.querySelectorAll('.d11-panel.drop-here').forEach((n) => { if (!rc || n !== rc.card) n.classList.remove('drop-here'); });
+        if (!rc) return null;
+        if (rc.key) {
+            rc.card.classList.add('drop-here');
+            const p = (inv().panels || []).find((q) => q.key === rc.key);
+            ptTag(T('Guardar em') + ' ' + ((p && p.label) || T('Painel')), 'trunk', e);
+        } else {
+            ptTag(null);
+        }
+        return rc;
+    }
+    // Etiqueta que segue o cursor: zone 'drop' (amarela) ou 'trunk' (azul); text vazio tira.
+    function ptTag(text, zone, e) {
+        if (!text) { if (wd.groundTag) { wd.groundTag.remove(); wd.groundTag = null; } return; }
+        if (!wd.groundTag) {
+            wd.groundTag = div('d11-ghost d11-pt-tag');
+            overlay.appendChild(wd.groundTag);
+        }
+        wd.groundTag.dataset.zone = zone || 'drop';
+        wd.groundTag.dataset.label = text;
+        if (e) wd.groundTag.style.transform = 'translate(' + e.clientX + 'px,' + e.clientY + 'px)';
+    }
+    function ptGroundHint(on, e) { ptTag(on ? T('Largar no chão') : null, 'drop', e); }
+    // Largar no chao no modo porta-malas, do porta-malas ou dos bolsos: vai para o ponto do cursor no chao (qualquer chao
+    // perto do carro), senao para o primeiro lugar livre na frente do porta-malas. Quem tira do slot e poe no chao e o servidor
+    // do d11_ptrunk; se o chao recusar, o item volta para o slot.
+    function ptToGround(at, x, y) {
+        if (!at || !(at.container === 'container' || ON_PERSON[at.container] || isPanelKey(at.container))) return;
+        const body = { from: at.container, slot: at.slot };
+        if (x != null) { body.x = x / innerWidth; body.y = y / innerHeight; }
+        ptPost('toGround', body);
+    }
+    function ptWorldReset() {
+        for (const k in wd.keys) if (wd.keys[k]) ptPost('key', { key: k, down: false });
+        wd.keys = {};
+        wd.grab = null;
+        wd.down = null;
+        wd.pending = null;
+        if (wd.hover != null) { wd.hover = null; hideTip(); }
+        wd.orbit = null;
+        wd.overTrunk = false;
+        ptWithdrawHint(false);
+        ptGroundHint(false);
+        ptBagHint(null);
+    }
+    function ptHover(slot) {
+        if (wd.grab || drag || menu) { if (wd.hover != null) { wd.hover = null; hideTip(); } return; }
+        if (slot === wd.hover) { if (slot != null && wd.last) moveTip(wd.last); return; }
+        wd.hover = slot;
+        if (slot != null && wd.last) showTip({ container: 'container', slot }, wd.last);
+        else hideTip();
+    }
+    // Um pedido de cada vez: o ultimo ponto espera o anterior responder (o Lua so precisa do mais novo).
+    function ptPointer() {
+        if (wd.inflight || !wd.pending) return;
+        const p = wd.pending;
+        wd.pending = null;
+        wd.inflight = true;
+        ptPost('pointer', p).then((r) => {
+            wd.inflight = false;
+            if (pt.on) {
+                wd.overTrunk = !!(r && r.overTrunk);
+                ptHover(r && r.hover != null ? r.hover : null);
+                if (wd.grab && wd.last && ptBagHint(wd.last)) {
+                    // Em cima de uma aba: ptBagHint ja disse o que acontece.
+                } else if (wd.grab && wd.grab.ground && wd.last) {
+                    // Item do chao na mao: em cima do porta-malas, "Guardar"; fora, o nome dele.
+                    ptTag(wd.overTrunk ? T('Guardar no porta-malas') : wd.grab.label, wd.overTrunk ? 'trunk' : 'drop', wd.last);
+                } else if (wd.grab && wd.last) {
+                    ptGroundHint(p.free && !wd.overTrunk && !ptOverLeft(wd.last.clientX, wd.last.clientY), wd.last);
+                } else if (!drag && wd.last) {
+                    // Passando em cima de um item do chao: o nome dele.
+                    ptTag(r && r.ground ? r.ground : null, 'drop', wd.last);
+                }
+                if (drag && drag.active && wd.last) setOver(wd.last.clientX, wd.last.clientY);
+            }
+            ptPointer();
+        });
+    }
+    // Camera orbital: o botao direito arrastando no meio da tela gira; os deltas juntam enquanto o anterior nao volta.
+    function ptOrbitSend() {
+        if (wd.orbitBusy) return;
+        const a = wd.orbitAcc;
+        if (!a.dx && !a.dy) return;
+        wd.orbitAcc = { dx: 0, dy: 0 };
+        wd.orbitBusy = true;
+        ptPost('orbit', a).then(() => { wd.orbitBusy = false; ptOrbitSend(); });
+    }
+    // Ponto de foco: como o giro, os deltas juntam enquanto o anterior nao volta.
+    function ptPanSend() {
+        if (wd.panBusy) return;
+        const a = wd.panAcc;
+        if (!a.dx && !a.dy) return;
+        wd.panAcc = { dx: 0, dy: 0 };
+        wd.panBusy = true;
+        ptPost('pan', a).then(() => { wd.panBusy = false; ptPanSend(); });
+    }
+    document.addEventListener('pointermove', (e) => {
+        if (!pt.on) return;
+        wd.last = e;
+        if (wd.orbit) {
+            // Botao direito (girar ou, com Shift, mover o foco) ou do meio (mover o foco).
+            if (!(e.buttons & (wd.orbit.pan && wd.orbit.button === 1 ? 4 : 2))) { wd.orbit = null; return; }
+            const dx = e.clientX - wd.orbit.x, dy = e.clientY - wd.orbit.y;
+            wd.orbit.x = e.clientX;
+            wd.orbit.y = e.clientY;
+            if (Math.abs(e.clientX - wd.orbit.sx) + Math.abs(e.clientY - wd.orbit.sy) > 4) wd.orbit.moved = true;
+            const acc = wd.orbit.pan ? wd.panAcc : wd.orbitAcc;
+            acc.dx += dx / innerWidth;
+            acc.dy += dy / innerHeight;
+            if (wd.orbit.pan) ptPanSend(); else ptOrbitSend();
+            return;
+        }
+        const free = ptFree(e.clientX, e.clientY);
+        wd.pending = { x: e.clientX / innerWidth, y: e.clientY / innerHeight, free: free || !!wd.grab,
+            carrying: !!(drag && drag.active) };
+        ptPointer();
+        if (wd.grab) ptWithdrawHint(ptOverLeft(e.clientX, e.clientY));
+    }, { signal });
+    document.addEventListener('wheel', (e) => {
+        if (!pt.on || drag || !ptFree(e.clientX, e.clientY)) return;
+        ptPost('zoom', { delta: e.deltaY });
+    }, { signal, passive: true });
+    document.addEventListener('pointerdown', (e) => {
+        if (pt.on && (e.button === 2 || e.button === 1) && !drag && ptFree(e.clientX, e.clientY)) {
+            if (e.button === 1) e.preventDefault();   // sem a rolagem automatica do botao do meio
+            wd.orbit = { x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY, moved: false,
+                button: e.button, pan: e.button === 1 || e.shiftKey };
+            return;
+        }
+        if (!pt.on || e.button !== 0 || drag || !ptFree(e.clientX, e.clientY)) return;
+        if (wd.hover != null) { wd.hover = null; hideTip(); }
+        const p = ptPost('down', { x: e.clientX / innerWidth, y: e.clientY / innerHeight });
+        wd.down = p;
+        p.then((r) => {
+            if (wd.down !== p || !r) return;
+            if (r.gizmo) wd.grab = { gizmo: true };
+            else if (r.grab) wd.grab = r.grab;
+            else if (r.grabGround) wd.grab = { ground: true, id: r.grabGround.id, label: r.grabGround.label };
+        });
+    }, { signal });
+    document.addEventListener('pointerup', (e) => {
+        // Clique do meio sem arrastar: o foco volta para o centro do porta-malas.
+        if (pt.on && e.button === 1 && wd.orbit) {
+            const o = wd.orbit;
+            wd.orbit = null;
+            if (!o.moved) ptPost('recenter');
+            return;
+        }
+        // Botao direito sem arrastar: opcoes do objeto (com arrasto foi so girar a camera).
+        if (pt.on && e.button === 2 && wd.orbit) {
+            const o = wd.orbit;
+            wd.orbit = null;
+            if (!o.moved && !o.pan) {
+                const x = e.clientX, y = e.clientY;
+                ptPost('ctx', { x: x / innerWidth, y: y / innerHeight }).then((r) => { if (r && r.slot != null) ptMenu(r, x, y); });
+            }
+            return;
+        }
+        if (!pt.on || e.button !== 0 || !wd.down) return;
+        const p = wd.down;
+        wd.down = null;
+        const x = e.clientX, y = e.clientY;
+        p.then((r) => {
+            const grab = r && r.grab;
+            const ground = r && r.grabGround;
+            // Gizmo: so termina (o Lua grava a pose).
+            if (r && r.gizmo) { wd.grab = null; ptPost('up', { x: x / innerWidth, y: y / innerHeight }); return; }
+            wd.grab = null;
+            ptWithdrawHint(false);
+            ptGroundHint(false);
+            ptBagHint(null);
+            const right = rightCardAt(x, y);
+            // Item do chao: numa bolsa aberta guarda nela; no painel do jogador guarda nos bolsos; em cima do porta-malas
+            // guarda nele (o Lua confere e chama o servidor).
+            if (ground) {
+                if (right && right.key) {
+                    const slot = panelSlotAt(right.key, x, y);
+                    if (slot == null) { notify(T('Não cabe mais nada aí.')); ptPost('up', { x: x / innerWidth, y: y / innerHeight, back: true }); return; }
+                    ptPost('up', { x: x / innerWidth, y: y / innerHeight, to: right.key, slot });
+                    return;
+                }
+                ptPost('up', { x: x / innerWidth, y: y / innerHeight, cancel: ptOverLeft(x, y) });
+                return;
+            }
+            if (!grab) return;
+            // Em cima de uma aba da direita: numa bolsa aberta guarda nela; no proprio porta-malas (ou outra aba), volta.
+            if (right) {
+                ptPost('up', { cancel: true });
+                if (!right.key) return;
+                const slot = panelSlotAt(right.key, x, y);
+                if (slot == null) { notify(T('Não cabe mais nada aí.')); return; }
+                run(actions.move({ container: 'container', slot: grab.slot }, { container: right.key, slot }));
+                return;
+            }
+            if (!ptOverLeft(x, y)) {
+                // Solto fora do porta-malas: o Lua devolve o objeto e manda largar o item no chao.
+                ptPost('up', { x: x / innerWidth, y: y / innerHeight }).then((u) => {
+                    if (u && u.ground) ptToGround({ container: 'container', slot: u.slot }, x, y);
+                });
+                return;
+            }
+            // No painel do jogador: retira. Em cima de um slot dos bolsos vai para ele; senao, onde couber.
+            ptPost('up', { cancel: true });
+            const from = { container: 'container', slot: grab.slot };
+            const to = targetAt(x, y);
+            run(to && ON_PERSON[to.container] ? actions.move(from, to) : actions.quickMove(from));
+        });
+    }, { signal });
+    // Botao do meio no modo porta-malas e do foco: sem a rolagem automatica do navegador.
+    document.addEventListener('mousedown', (e) => {
+        if (pt.on && e.button === 1) e.preventDefault();
+    }, { signal });
+    // O menu do objeto abre no pointerup do botao direito (acima); aqui so o menu do navegador sai de cena.
+    document.addEventListener('contextmenu', (e) => {
+        if (pt.on && ptFree(e.clientX, e.clientY)) e.preventDefault();
+    }, { signal });
+    function ptMenu(r, x, y) {
+        closeMenu();
+        hideTip();
+        wd.hover = null;
+        const at = { container: 'container', slot: r.slot };
+        const d = actions.slotAt('container', r.slot);
+        if (!d) return;
+        const el = div('d11-menu');
+        el.appendChild(div('d11-menu-title', (defs()[d.item] || {}).name || d.item));
+        const add = (label, fn) => {
+            const b = document.createElement('button');
+            b.className = 'd11-menu-item';
+            b.textContent = label;
+            b.addEventListener('click', () => { closeMenu(); fn(); });
+            el.appendChild(b);
+        };
+        if (opensAsPanel(d)) add(T('Abrir'), () => openStore(at));   // bolsa ou caixa: o painel ao lado
+        add(T('Retirar'), () => run(actions.quickMove(at)));
+        add(T('Largar no chão'), () => ptToGround(at));
+        add(T('Inspecionar'), () => ptPost('action', { what: 'inspect', key: r.key }));
+        add(T('Posicionar com o teclado'), () => ptPost('action', { what: 'select', key: r.key }));
+        add(T('Endireitar'), () => ptPost('action', { what: 'reset', key: r.key }));
+        overlay.appendChild(el);
+        place(el, x, y);
+        menu = { at, el };
+    }
+    // Duplo clique num objeto do porta-malas que e bolsa ou caixa: abre o painel dela (como o duplo clique no card).
+    document.addEventListener('dblclick', (e) => {
+        if (!pt.on || drag || !ptFree(e.clientX, e.clientY)) return;
+        ptPost('ctx', { x: e.clientX / innerWidth, y: e.clientY / innerHeight }).then((r) => {
+            if (!r || r.slot == null) return;
+            const at = { container: 'container', slot: r.slot };
+            if (opensAsPanel(actions.slotAt('container', r.slot))) openStore(at);
+        });
+    }, { signal });
+    const PT_KEYS = { KeyW: 'w', KeyA: 'a', KeyS: 's', KeyD: 'd', KeyQ: 'q', KeyE: 'e', KeyR: 'r', KeyF: 'f',
+        ShiftLeft: 'shift', ShiftRight: 'shift', ControlLeft: 'control', ControlRight: 'control', Backspace: 'backspace' };
+    function ptKey(e, down) {
+        if (!pt.on) return;
+        const k = PT_KEYS[e.code];
+        if (!k) return;
+        const t = e.target;
+        if (down && t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) return;
+        if (!!wd.keys[k] === down) return;
+        wd.keys[k] = down;
+        ptPost('key', { key: k, down });
+    }
+    document.addEventListener('keydown', (e) => ptKey(e, true), { signal });
+    document.addEventListener('keyup', (e) => ptKey(e, false), { signal });
+    window.addEventListener('blur', () => { if (pt.on) ptWorldReset(); }, { signal });
+    function ptStateOf(s) {
+        return { light: !!s.light, grid: !!s.grid, highlights: !!s.highlights, gizmo: !!s.gizmo, hud: !!s.hud };
+    }
+    // Cabecalho do porta-malas (pedido de 2026-11-16, no lugar da barra do rodape): a esquerda o que se ve no porta-malas
+    // (luz, grade da area util, contorno em todos, gizmo); a direita a tela (Ocultar HUD: as abas 98% transparentes,
+    // menos este cabecalho; camera de volta a vista inicial) e "?", que abre os atalhos em teclas logo abaixo.
+    function ptTools() {
+        const bar = div('d11-pt-tools');
+        const view = div('d11-pt-group');
+        const screen = div('d11-pt-group');
+        const pill = (into, label, on, click, title) => {
+            const b = document.createElement('button');
+            b.className = 'd11-pill-btn' + (on ? ' on' : '');
+            b.textContent = label;
+            if (title) b.title = title;
+            b.addEventListener('click', click);
+            into.appendChild(b);
+        };
+        const toggle = (into, what, label) => pill(into, label, pt.state[what], () => ptPost('toggle', { what }).then((s) => {
+            if (s) { pt.state = ptStateOf(s); render(); }
+        }));
+        toggle(view, 'light', T('Luz'));
+        toggle(view, 'grid', T('Grade'));
+        toggle(view, 'highlights', T('Destaques'));
+        toggle(view, 'gizmo', T('Gizmo'));
+        toggle(screen, 'hud', T('Ocultar HUD'));
+        pill(screen, T('Câmera'), false, () => ptPost('camreset'), T('Voltar a câmera para a vista inicial'));
+        pill(screen, '?', pt.help, () => { pt.help = !pt.help; render(); }, T('Atalhos'));
+        bar.appendChild(view);
+        bar.appendChild(screen);
+        return bar;
+    }
+    // Os atalhos do modo porta-malas, em teclas.
+    const PT_LEGEND = [
+        ['Arrastar', 'Mover objeto · fora do porta-malas: chão'],
+        ['Clique', 'Selecionar objeto'],
+        ['W A S D', 'Mover o selecionado'],
+        ['R / F', 'Subir / descer'],
+        ['Q / E', 'Girar'],
+        ['Botão direito', 'Opções · arrastando: girar câmera'],
+        ['Duplo clique', 'Abrir bolsa ou caixa'],
+        ['Meio · Shift+direito', 'Mover o foco'],
+        ['Roda', 'Zoom'],
+    ];
+    function ptKeys() {
+        const box = div('d11-pt-keys');
+        for (const [key, what] of PT_LEGEND) {
+            const row = div('d11-pt-key');
+            const k = document.createElement('kbd');
+            k.textContent = T(key);
+            row.appendChild(k);
+            row.appendChild(span('', T(what)));
+            box.appendChild(row);
+        }
+        return box;
+    }
+
+    // ---------------- itens do chao com o mouse (d11_ptrunk, client/ground.lua) ----------------
+    // Com o inventario aberto e fora do modo porta-malas: passar o mouse num item do chao mostra o nome; arrastar leva o
+    // fantasma dele pelo chao (Q/E giram); soltar no mundo muda de lugar, no painel do jogador guarda nos bolsos, num
+    // stash, porta-malas ou bolsa aberta guarda ali. Sem o d11_ptrunk, nada disso liga.
+    const gw = { on: false, pending: null, inflight: false, last: null, down: null, grab: null, keys: {},
+        cam: null, camAcc: { dx: 0, dy: 0 }, camBusy: false };
+    function gwActive() { const i = inv(); return gw.on && !pt.on && !!(i && i.open); }
+    function gwReset() {
+        for (const k in gw.keys) if (gw.keys[k]) ptPost('gkey', { key: k, down: false });
+        gw.keys = {};
+        gw.grab = null;
+        gw.down = null;
+        gw.pending = null;
+        ptTag(null);
+    }
+    api.events.on('open', () => {
+        gw.on = false;
+        ptPost('gmode').then((r) => { gw.on = !!(r && r.active); });
+    });
+    api.events.on('close', () => {
+        if (gw.on) ptPost('gclosed');
+        gw.on = false;
+        gwReset();
+    });
+    // Para onde vai o item do chao solto em (x, y): { to, slot } (bolsos, stash/porta-malas, bolsa) ou {} (mundo).
+    function gwDest(x, y) {
+        const el = document.elementFromPoint(x, y);
+        if (!el || !el.closest) return {};
+        const at = targetAt(x, y);
+        if (el.closest('.d11inv .d11-left')) {
+            return { to: 'player', slot: at && at.container === 'player' ? at.slot : 0 };
+        }
+        const card = el.closest('.d11inv .d11-right .d11-card');
+        if (!card) return {};
+        if (card.dataset.panel) {
+            return { to: card.dataset.panel, slot: at && at.container === card.dataset.panel ? at.slot : 0 };
+        }
+        const i = inv();
+        if (i.containerOpen && i.containerStoreId && card.querySelector('[data-c="container"]')) {
+            return { to: String(i.containerStoreId), slot: at && at.container === 'container' ? at.slot : 0 };
+        }
+        return { none: true };
+    }
+    function gwLabel(x, y) {
+        const d = gwDest(x, y);
+        if (d.none) return null;
+        if (d.to === 'player') return T('Guardar nos bolsos');
+        if (d.to) return T('Guardar aqui');
+        return T('Mover para cá') + ' · ' + T('R/F: altura · Q/E: girar (Shift/Ctrl: outro eixo)');
+    }
+    // Botao direito ou do meio arrastando no espaco livre: gira a camera do jogo (os deltas juntam enquanto o anterior
+    // nao volta); a roda aproxima/afasta (como a camera do porta-malas).
+    function gwCamSend() {
+        if (gw.camBusy) return;
+        const a = gw.camAcc;
+        if (!a.dx && !a.dy) return;
+        gw.camAcc = { dx: 0, dy: 0 };
+        gw.camBusy = true;
+        ptPost('gcam', a).then(() => { gw.camBusy = false; gwCamSend(); });
+    }
+    function gwPointer() {
+        if (gw.inflight || !gw.pending) return;
+        const p = gw.pending;
+        gw.pending = null;
+        gw.inflight = true;
+        ptPost('gpointer', p).then((r) => {
+            gw.inflight = false;
+            if (gwActive() && !gw.grab && !drag && gw.last) ptTag(r && r.ground ? r.ground : null, 'drop', gw.last);
+            gwPointer();
+        });
+    }
+    document.addEventListener('pointermove', (e) => {
+        if (!gwActive() || (drag && drag.active)) return;
+        if (gw.cam) {
+            if (!(e.buttons & gw.cam.mask)) { gw.cam = null; return; }
+            gw.camAcc.dx += (e.clientX - gw.cam.x) / innerWidth;
+            gw.camAcc.dy += (e.clientY - gw.cam.y) / innerHeight;
+            gw.cam = { x: e.clientX, y: e.clientY };
+            gwCamSend();
+            return;
+        }
+        gw.last = e;
+        gw.pending = { x: e.clientX / innerWidth, y: e.clientY / innerHeight, free: ptFree(e.clientX, e.clientY) || !!gw.grab };
+        gwPointer();
+        if (gw.grab) ptTag(gwLabel(e.clientX, e.clientY), 'trunk', e);
+    }, { signal });
+    document.addEventListener('pointerdown', (e) => {
+        if (gwActive() && (e.button === 1 || e.button === 2) && !drag && ptFree(e.clientX, e.clientY)) {
+            e.preventDefault();
+            gw.cam = { x: e.clientX, y: e.clientY, mask: e.button === 1 ? 4 : 2 };
+            return;
+        }
+        if (!gwActive() || e.button !== 0 || drag || !ptFree(e.clientX, e.clientY)) return;
+        const p = ptPost('gdown', { x: e.clientX / innerWidth, y: e.clientY / innerHeight });
+        gw.down = p;
+        p.then((r) => {
+            if (gw.down !== p || !r || !r.grab) return;
+            gw.grab = r.grab;
+            hideTip();
+        });
+    }, { signal });
+    document.addEventListener('pointerup', (e) => {
+        if ((e.button === 1 || e.button === 2) && gw.cam) { gw.cam = null; return; }
+        if (e.button !== 0 || !gw.down) return;
+        const p = gw.down;
+        gw.down = null;
+        const x = e.clientX, y = e.clientY;
+        p.then((r) => {
+            if (!r || !r.grab) return;
+            const dest = gwDest(x, y);
+            gwReset();
+            if (dest.none) { ptPost('gup', { x: x / innerWidth, y: y / innerHeight, to: 'cancel' }); return; }
+            ptPost('gup', Object.assign({ x: x / innerWidth, y: y / innerHeight }, dest));
+        });
+    }, { signal });
+    const GW_KEYS = { KeyQ: 'q', KeyE: 'e', KeyR: 'r', KeyF: 'f', ShiftLeft: 'shift', ShiftRight: 'shift',
+        ControlLeft: 'control', ControlRight: 'control' };
+    function gwKey(e, down) {
+        if (!gw.grab && down) return;
+        const k = GW_KEYS[e.code];
+        if (!k || !!gw.keys[k] === down) return;
+        gw.keys[k] = down;
+        ptPost('gkey', { key: k, down });
+    }
+    document.addEventListener('keydown', (e) => gwKey(e, true), { signal });
+    document.addEventListener('keyup', (e) => gwKey(e, false), { signal });
+    // Roda no espaco livre (ou com um item do chao na mao): aproxima/afasta a camera. Botao do meio e direito no espaco
+    // livre: sem a rolagem e o menu do navegador.
+    document.addEventListener('wheel', (e) => {
+        if (gwActive() && (gw.grab || ptFree(e.clientX, e.clientY))) ptPost('gzoom', { delta: e.deltaY });
+    }, { signal, passive: true });
+    document.addEventListener('mousedown', (e) => {
+        if (gwActive() && e.button === 1) e.preventDefault();
+    }, { signal });
+    document.addEventListener('contextmenu', (e) => {
+        if (gwActive() && ptFree(e.clientX, e.clientY)) e.preventDefault();
+    }, { signal });
+
     // ---------------- render ----------------
     function render() {
         hideTip();
@@ -572,8 +1204,11 @@ export default function createRenderer({ api, mount, close, addStylesheet, signa
         for (const c of externalCards()) right.appendChild(c);
 
         root.replaceChildren(left, right);
+        // Ocultar HUD no porta-malas: as abas ficam quase invisiveis (style.css .pt-clear) para ver os objetos.
+        mount.classList.toggle('pt-clear', !!(pt.on && pt.state.hud));
         if (menu) closeMenu();
         if (pad.on) { pad.over = null; padUpdate(); }
+        ptRender();
     }
 
     // ---------------- acoes ----------------
@@ -606,13 +1241,39 @@ export default function createRenderer({ api, mount, close, addStylesheet, signa
     // Soltar no cartao do personagem usa o item; soltar fora das janelas larga a pilha no chao, com a animacao de
     // pousar (client/main.lua deste resource). So o que esta com voce (bolsos e faixa), como no WHIP.
     const ON_PERSON = { player: true, accessory: true };
+
+    // ---------------- municao no pente (whip_gunny; client/ammo.lua) ----------------
+    // Soltar a municao num pente que a leva carrega o pente pela opcao nativa ('whip_gunny:load_mag': a barra e a
+    // animacao do gunny). Num pente de outro calibre o item nao vai e o jogador e avisado. So nos bolsos e na faixa:
+    // o gunny carrega com a municao que voce leva.
+    let ammoOf = {};   // [pente] = item da municao que ele leva
+    const gunnyInfo = () => fetch('https://d11_inventory/gunnyInfo', {
+        method: 'POST', headers: { 'Content-Type': 'application/json; charset=UTF-8' }, body: '{}',
+    }).then((r) => r.json()).then((r) => { if (r && r.ammoOf) ammoOf = r.ammoOf; }).catch(() => {});
+    gunnyInfo();
+    /** 'ok' (carrega), 'no' (pente de outro calibre) ou null (nao e municao num pente). */
+    function ammoOnMag(from, to) {
+        if (!to || !ON_PERSON[from.container] || !ON_PERSON[to.container]) return null;
+        const a = actions.slotAt(from.container, from.slot), m = actions.slotAt(to.container, to.slot);
+        if (!a || !m || !ammoOf[m.item] || (defs()[a.item] || {}).type !== 'ammo') return null;
+        return ammoOf[m.item] === a.item ? 'ok' : 'no';
+    }
     function zoneAt(x, y) {
-        if (!drag || !ON_PERSON[drag.from.container]) return null;
-        if (body && body.hit(x, y)) return 'body';
+        if (!drag) return null;
+        const c = drag.from.container;
+        const person = !!ON_PERSON[c];
+        // No modo porta-malas tambem os cards do porta-malas tem zona no meio da tela (chao, fora dele).
+        if (!person && !(pt.on && (c === 'container' || isPanelKey(c)))) return null;
+        if (person && body && body.hit(x, y)) return 'body';
         const hit = document.elementFromPoint(x, y);
         if (hit && hit.closest && hit.closest('.d11inv .d11-slot')) return null;
-        if (hit && hit.closest && hit.closest('.d11inv .d11-character')) return body.isOff() ? null : 'use';
-        if (!hit || !hit.closest || !hit.closest('.d11inv .d11-card, .d11inv .d11-menu, .d11inv .d11-help')) return 'drop';
+        if (person && hit && hit.closest && hit.closest('.d11inv .d11-character')) return body.isOff() ? null : 'use';
+        if (!hit || !hit.closest || !hit.closest('.d11inv .d11-card, .d11inv .d11-menu, .d11inv .d11-help')) {
+            if (!pt.on) return 'drop';
+            // Em cima do porta-malas guarda; fora dele larga no chao (o Lua diz pelo raio da camera).
+            if (wd.overTrunk) return c === 'container' ? null : 'trunk';
+            return 'drop';
+        }
         return null;
     }
     function usable(at) {
@@ -631,9 +1292,10 @@ export default function createRenderer({ api, mount, close, addStylesheet, signa
             ch.classList.toggle('use-refuse', zone === 'use' && !use);
         }
         if (drag.ghost) {
-            drag.ghost.dataset.zone = zone === 'drop' ? 'drop' : use ? 'use' : '';
+            drag.ghost.dataset.zone = zone === 'drop' || zone === 'trunk' ? zone : use ? 'use' : '';
             const kind = use && actions.equipKind ? actions.equipKind(drag.from) : null;
-            drag.ghost.dataset.label = zone === 'drop' ? T('Largar no chão') : (BODY_LABELS[kind] || BODY_LABELS.use);
+            drag.ghost.dataset.label = zone === 'drop' ? T('Largar no chão')
+                : zone === 'trunk' ? T('Guardar no porta-malas') : (BODY_LABELS[kind] || BODY_LABELS.use);
         }
     }
     function clearZone() {
@@ -699,6 +1361,8 @@ export default function createRenderer({ api, mount, close, addStylesheet, signa
         const to = addr(s.dataset.c, s.dataset.s);
         let no = false;
         try { no = actions.refused(drag.from, to) === true; } catch (e) { no = false; }
+        const mag = ammoOnMag(drag.from, to);
+        if (mag) no = mag === 'no';
         s.classList.toggle('drop-no', no);
         s.classList.toggle('drop-ok', !no);
     }
@@ -708,6 +1372,7 @@ export default function createRenderer({ api, mount, close, addStylesheet, signa
         if (!drag.active) {
             if (Math.abs(e.clientX - drag.sx) + Math.abs(e.clientY - drag.sy) < 5) return;
             drag.active = true;
+            gunnyInfo();   // pentes de um pack que chegou depois
             hideTip();
             drag.el.classList.add('dragging');
             const g = div('d11-ghost');
@@ -735,12 +1400,16 @@ export default function createRenderer({ api, mount, close, addStylesheet, signa
             const zone = onBody ? 'use' : to ? null : zoneAt(e.clientX, e.clientY);
             drag = null;
             if (body) body.end();
-            if (to && (to.container !== d.from.container || to.slot !== d.from.slot)) run(actions.move(d.from, to));
+            const mag = ammoOnMag(d.from, to);
+            if (mag === 'ok') run(actions.runOption(to, 'whip_gunny:load_mag', {}));
+            else if (mag === 'no') { notify(T('Essa munição não serve nesse pente.')); render(); }
+            else if (to && (to.container !== d.from.container || to.slot !== d.from.slot)) run(actions.move(d.from, to));
             else if (zone === 'use') {
                 if (usable(d.from)) run(equip(d.from));
                 else { notify(T('Esse item não tem uso.')); render(); }
             }
-            else if (zone === 'drop') dropToGround(d.from);
+            else if (zone === 'drop') { if (pt.on) ptToGround(d.from, e.clientX, e.clientY); else dropToGround(d.from); }
+            else if (zone === 'trunk') ptDeposit(d.from, e.clientX, e.clientY);
             else render();
         } else if (d.shift || e.shiftKey) {
             run(actions.quickMove(d.from));
@@ -752,19 +1421,36 @@ export default function createRenderer({ api, mount, close, addStylesheet, signa
         closeMenu();
         let m = null;
         try { m = actions.menuFor(at); } catch (e) { m = null; }
+        // "Destruir" (so no modo dev do whip_core) nao aparece aqui: apagar um item de vez pelo menu e perigoso demais.
+        if (m && m.options) m = Object.assign({}, m, { options: m.options.filter((o) => o.action !== 'destroy') });
         const groundBag = at.container === 'ground' && opensAsPanel(actions.slotAt(at.container, at.slot));
-        if (!groundBag && (!m || !m.options || !m.options.length)) return;
+        // Bolsa ou caixa num porta-malas ou stash aberto: abre ali (whip_core-store-panel-d11.patch)
+        const storeBag = at.container === 'container' && opensAsPanel(actions.slotAt(at.container, at.slot));
+        if (!groundBag && !storeBag && (!m || !m.options || !m.options.length)) return;
         const el = div('d11-menu');
         el.appendChild(div('d11-menu-title', (m && m.title) || (defs()[actions.slotAt(at.container, at.slot).item] || {}).name || ''));
-        if (groundBag) {   // bolsa no chao: abre ali (whip_core-ground-panel-d11.patch)
+        if (groundBag || storeBag) {   // bolsa no chao ou num store: abre ali (patches ground-panel / store-panel)
             const b = document.createElement('button');
             b.className = 'd11-menu-item';
             b.textContent = T('Abrir');
-            b.addEventListener('click', () => { closeMenu(); openGround(at); });
+            b.addEventListener('click', () => { closeMenu(); if (groundBag) openGround(at); else openStore(at); });
             el.appendChild(b);
             if (m && m.options && m.options.length) el.appendChild(div('d11-menu-sep'));
         }
         if (!m || !m.options) m = { options: [] };
+        // Arma do gunny: carregar todos os pentes dela, um por vez (com ela na mao; client/ammo.lua)
+        const gun = ON_PERSON[at.container] && defs()[(actions.slotAt(at.container, at.slot) || {}).item];
+        if (gun && gun.defaultAction === 'whip_gunny:equip_weapon' && (gun.metaFields || []).some((r) => r.key === 'caliber')) {
+            const b = document.createElement('button');
+            b.className = 'd11-menu-item';
+            b.textContent = T('Carregar todos os pentes');
+            b.addEventListener('click', () => {
+                closeMenu();
+                fetch('https://d11_inventory/loadAllMags', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).catch(() => {});
+            });
+            el.appendChild(b);
+            if (m.options.length) el.appendChild(div('d11-menu-sep'));
+        }
         let group = null;
         for (const o of m.options) {
             if (group && o.group !== group) el.appendChild(div('d11-menu-sep'));

@@ -1,0 +1,26 @@
+D11: barra de progresso com keepInventory = true nao fecha o inventario (carregar pente pelo inventario).
+Aplicar em resources/: patch -p1 < whip_core-progress-keep-inventory-d11.patch (junto com whip_gunny-mag-load-keep-inventory-d11.patch)
+
+--- a/whip_core/server/timed_action.lua
++++ b/whip_core/server/timed_action.lua
+@@ -80,6 +80,8 @@
+         cancelOnExit  = opts.cancelOnExit == true,
+         -- Read again there (BodyState.readList): checked here before it was sent.
+         notWhile      = plain(opts.notWhile),
++        -- D11: a bar done on an item in the inventory (loading a magazine) leaves the inventory open.
++        keepInventory = opts.keepInventory == true,
+     }
+ end
+ 
+--- a/whip_core/client/ui.lua
++++ b/whip_core/client/ui.lua
+@@ -422,7 +422,8 @@
+         UI.ShowInterrupted(refused, label)
+         return false, REFUSED, refused
+     end
+-    _ensureInventoryClosed()
++    -- D11: opts.keepInventory leaves the inventory open (a bar done on an item in it: loading a magazine).
++    if not (opts and opts.keepInventory == true) then _ensureInventoryClosed() end
+     -- End any emote before the bar starts, so its props go with it.
+     if Emotes ~= nil then Emotes.stop() end
+     opts = opts or {}

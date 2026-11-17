@@ -1,0 +1,33 @@
+# whip_core-item-prop-amount-d11 (LGPL): incremental ao whip_core-item-prop-resolver-d11 (e ao ground-physics). O modelo do
+# chao pergunta ao resolver com a quantidade da pilha: Inventory.itemPropModel(itemKey, amount) e
+# exports[resolver]:ItemPropModel(itemKey, amount). Aplicar a partir de resources/ depois dos outros dois.
+--- a/whip_core/client/inventory.lua
++++ b/whip_core/client/inventory.lua
+@@ -1878,13 +1878,14 @@
+ --- A model missing from this client's archives (IsModelInCdimage) would time out, so it falls back to Config.DefaultGroundProp.
+ ---@param itemKey string
+ ---@return string
+-function Inventory.itemPropModel(itemKey)
++function Inventory.itemPropModel(itemKey, amount)
+     -- D11 patch (docs/patches/whip_core-item-prop-resolver-d11.patch, LGPL): a resource named by
+     -- `setr whip_item_prop_resolver <resource>` may pick the model (its export ItemPropModel(itemKey) answers a model
+     -- name, or nil to keep the item's own prop), so the ground and the hand show what that resource shows elsewhere.
+     local resolver = GetConvar('whip_item_prop_resolver', '')
+     if resolver ~= '' and GetResourceState(resolver) == 'started' then
+-        local ok, model = pcall(function() return exports[resolver]:ItemPropModel(itemKey) end)
++        -- D11 (whip_core-item-prop-amount-d11): with the pile's count, when the caller knows it (the ground).
++        local ok, model = pcall(function() return exports[resolver]:ItemPropModel(itemKey, amount) end)
+         if ok and type(model) == 'string' and model ~= '' and IsModelInCdimage(GetHashKey(model)) then return model end
+     end
+ 
+--- a/whip_core/client/ground.lua
++++ b/whip_core/client/ground.lua
+@@ -564,7 +564,7 @@
+         return
+     end
+ 
+-    local modelName = Inventory.itemPropModel(data.item)
++    local modelName = Inventory.itemPropModel(data.item, data.amount)   -- D11 item-prop-amount: by the pile's count
+     spawning[data.id] = true
+     local model = LoadModel(modelName)
+     spawning[data.id] = nil

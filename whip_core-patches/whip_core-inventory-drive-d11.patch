@@ -1,5 +1,5 @@
 D12: andar e dirigir com o inventario aberto, so no teclado (aplicar depois de whip_core-inventory-noblur-d11.patch).
-A pe: WASD e Shift; motorista: WASD e espaco; controle: tudo bloqueado (o analogico e do cursor). Camera: setr whip_inventory_drive_look 1.
+A pe: WASD e Shift; motorista: WASD e espaco; controle: tudo bloqueado (o analogico e do cursor). Liga/desliga e camera: D11Inventory.World no config do d11_inventory.
 Aplicar em resources/: patch -p1 < whip_core-inventory-drive-d11.patch
 
 --- a/whip_core/client/controller.lua
@@ -66,7 +66,7 @@ Aplicar em resources/: patch -p1 < whip_core-inventory-drive-d11.patch
 +    if not invMoving then return nil end
 +    if WhipPadActive then return {} end
 +    local keys = { table.unpack(MOVE_KEYS[invMoving]) }
-+    if GetConvarInt('whip_inventory_drive_look', 0) == 1 then keys[#keys + 1] = 1; keys[#keys + 1] = 2 end
++    if GetConvarInt('d11_inventory_move_look', 0) == 1 then keys[#keys + 1] = 1; keys[#keys + 1] = 2 end
 +    return keys
 +end
 +
@@ -84,10 +84,10 @@ Aplicar em resources/: patch -p1 < whip_core-inventory-drive-d11.patch
 @@ -1046,7 +1079,10 @@
      if data and data.inventory then _cachedInventory = data.inventory end
      if data then UpdateItemFlags(data) end
-     -- D12: sem blur no jogo ao abrir o inventario (o fade-out do fechar fica: sem blur, nao faz nada).
+     if GetConvarInt('d11_inventory_blur', 0) == 1 then TriggerScreenblurFadeIn(200) end   -- D11: sem blur por padrao (d11_inventory World.Blur)
 -    Focus.take('inventory')
 +    -- D12: anda e dirige no teclado (InventoryDriveKeys): o foco guarda a entrada do jogo, o bloco solta so o mover.
-+    invMoving = moveMode()
++    invMoving = GetConvarInt('d11_inventory_move', 1) == 1 and moveMode() or nil   -- D11: d11_inventory World.Move
 +    Focus.take('inventory', { keepInput = invMoving ~= nil })
 +    InventoryDriveSync()
  

@@ -1,0 +1,21 @@
+D11: carregar pente nao fecha o inventario (pede keepInventory a barra; precisa de whip_core-progress-keep-inventory-d11.patch).
+Aplicar em resources/: patch -p1 < whip_gunny-mag-load-keep-inventory-d11.patch
+
+--- a/whip_gunny/server/magazines.lua
++++ b/whip_gunny/server/magazines.lua
+@@ -17,6 +17,7 @@
+     seated   = { dict = 'whippy_mag_load', clip = 'load_x2_seated', flag = 49 },
+     disable  = { move = 'walk', car = true },
+     notWhile = { 'swimming', 'falling' },
++    keepInventory = true,   -- D11: loading from the inventory leaves it open (whip_core-progress-keep-inventory-d11.patch)
+ }
+ 
+ --- Who is told to draw a loading player's magazine: everyone this close when the load starts.
+@@ -110,6 +111,7 @@
+         anim      = seated and MAG_LOAD_BAR.seated or MAG_LOAD_BAR.anim,
+         disable   = MAG_LOAD_BAR.disable,
+         notWhile  = MAG_LOAD_BAR.notWhile,
++        keepInventory = MAG_LOAD_BAR.keepInventory,
+     })
+ 
+     -- How many rounds went in: all of them, or — stopped part way — one per MS_PER_ROUND the bar ran

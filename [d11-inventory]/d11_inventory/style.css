@@ -132,6 +132,9 @@
 .d11-equip-cell.split { position: relative; }
 .d11-equip-cell.split::before { content: ''; position: absolute; left: -.2em; top: .4em; bottom: .4em; width: 1px; background: var(--line); }
 .d11-equip-icon svg { width: 100%; height: 100%; }
+.d11-equip-icon.png { inset: 28% 8%; }   /* silhueta larga: menos margem dos lados (CEF 103: sem :has) */
+.d11-equip-png { display: block; width: 100%; height: 100%; background: currentColor;
+    -webkit-mask: no-repeat center / contain; mask: no-repeat center / contain; }
 
 /* ---------- cursor do controle ([I] mesmo papel do .pad-cursor do WHIP) ---------- */
 .d11-pad-cursor {
@@ -163,6 +166,8 @@
 /* ---------- grade e slot em faixas ([I] l.205-300) ---------- */
 .d11-grid { display: grid; grid-template-columns: repeat(var(--cols, 5), minmax(0, 1fr)); gap: .35em; }
 .d11-grid.scroll { flex: 1; min-height: 0; overflow-y: auto; align-content: start; padding-right: .2em; }
+/* store com bolsa ou caixa aberta: duas fileiras e rola por dentro, para o painel aparecer embaixo sem descer */
+.d11-card.d11-compact .d11-grid { max-height: calc(2 * 7.1em + .35em); overflow-y: auto; padding-right: .2em; }
 .d11-slot {
     position: relative; height: 7.1em; border-radius: .4em;
     background: var(--neutral);
@@ -226,13 +231,53 @@
 .d11-ghost { position: fixed; left: 0; top: 0; width: 4.2em; height: 4.2em; margin: -2.1em 0 0 -2.1em; pointer-events: none; z-index: 10; }
 .d11-ghost img { width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 4px 12px rgba(0, 0, 0, .6)); }
 /* etiqueta do fantasma: o que acontece se soltar aqui (usar no personagem, largar fora das janelas) */
-.d11-ghost[data-zone="use"]::after, .d11-ghost[data-zone="drop"]::after {
+.d11-ghost[data-zone="use"]::after, .d11-ghost[data-zone="drop"]::after, .d11-ghost[data-zone="trunk"]::after {
     position: absolute; left: 50%; top: 100%; transform: translate(-50%, .35em); white-space: nowrap;
     padding: .35em .6em; border-radius: 99px; background: var(--ink); box-shadow: 0 2px 8px rgba(0, 0, 0, .5), inset 0 0 0 1px var(--line);
     font: italic 700 .62em/1 'D11 Display', sans-serif; letter-spacing: .06em; text-transform: uppercase; color: var(--dark);
 }
 .d11-ghost[data-zone="use"]::after { content: attr(data-label); color: var(--accent); }
 .d11-ghost[data-zone="drop"]::after { content: attr(data-label); color: var(--amber); }
+.d11-ghost[data-zone="trunk"]::after { content: attr(data-label); color: var(--accent); }
+/* porta-malas fisico (d11_ptrunk): sem o escurecido do WHIP atras do inventario, o meio da tela mostra o porta-malas */
+html.d11pt #inv-wash { opacity: 0 !important; transition: none !important; }
+/* barra do porta-malas: no pe do meio da tela, entre as colunas */
+/* cabecalho do porta-malas: as opcoes do modo fisico, entre o titulo e a grade (vista a esquerda, tela a direita) */
+.d11-pt-tools {
+    display: flex; align-items: center; justify-content: space-between; gap: .5em; margin: .15em 0 .6em;
+    padding: .35em; border-radius: .55em; background: rgba(255, 255, 255, .035); box-shadow: inset 0 0 0 1px var(--line);
+}
+.d11-pt-group { display: flex; flex-wrap: wrap; align-items: center; gap: .3em; }
+.d11-pt-group + .d11-pt-group { justify-content: flex-end; padding-left: .5em; box-shadow: inset 1px 0 0 var(--line); }
+/* os atalhos ("?"), em teclas */
+.d11-pt-keys {
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .45em 1em; margin: -.25em 0 .6em;
+    padding: .6em .7em; border-radius: .55em; background: rgba(255, 255, 255, .035); font-size: .66em;
+}
+.d11-pt-key { display: flex; align-items: center; gap: .55em; min-width: 0; }
+.d11-pt-key kbd {
+    flex: none; padding: .3em .5em; border-radius: .3em; background: rgba(255, 255, 255, .1);
+    box-shadow: inset 0 -1px 0 rgba(0, 0, 0, .45); font: italic 700 .9em/1 'D11 Display', sans-serif;
+    letter-spacing: .04em; text-transform: uppercase; white-space: nowrap;
+}
+.d11-pt-key span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: .75; }
+/* Ocultar HUD no porta-malas: as abas 98% transparentes para ver os objetos; o cabecalho do porta-malas fica, e o mouse
+   em cima de uma aba traz ela de volta (arrastar para os bolsos continua possivel) */
+.d11inv.pt-clear .d11-col > *, .d11inv.pt-clear .d11-pt-card > *, .d11inv.pt-clear .d11-pt-card {
+    transition: opacity .18s ease, background-color .18s ease, box-shadow .18s ease;
+}
+.d11inv.pt-clear .d11-col > :not(.d11-pt-card):not(:hover) { opacity: .02; }
+.d11inv.pt-clear .d11-pt-card:not(:hover) { background: transparent; box-shadow: none; }
+.d11inv.pt-clear .d11-pt-card:not(:hover) > :not(.d11-pt-tools):not(.d11-pt-keys) { opacity: .02; }
+/* objeto do porta-malas arrastado sobre o painel do jogador: soltar retira */
+.d11-pt-tag { width: 0; height: 0; margin: 0; }
+.d11-pt-tag[data-zone="trunk"]::after { color: var(--accent); }
+.d11-left.pt-withdraw { outline: 2px dashed var(--accent); outline-offset: .3em; border-radius: .4em; }
+.d11-left.pt-withdraw::after {
+    content: attr(data-hint); position: absolute; left: 50%; top: -1.9em; transform: translateX(-50%); white-space: nowrap;
+    padding: .35em .7em; border-radius: 99px; background: var(--accent); color: #fff;
+    font: italic 700 .62em/1 'D11 Display', sans-serif; letter-spacing: .06em; text-transform: uppercase;
+}
 /* ficha do personagem como alvo de usar */
 .d11-character { position: relative; transition: box-shadow .12s ease; }
 .d11-character.use-target { box-shadow: var(--shadow), inset 0 0 0 2px var(--accent); }

@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>d11_ptrunk wizard</title>
+<link rel="stylesheet" href="wizard.css">
+</head>
+<body>
+<!-- Painel do wizard de calibracao do porta-malas (client/wizard.lua manda o estado por SendNUIMessage; sem foco). -->
+<aside id="panel" hidden>
+    <ol id="steps"></ol>
+    <header>
+        <div class="kicker" id="kicker"></div>
+        <h1 id="title"></h1>
+        <div class="model" id="model"></div>
+    </header>
+    <p id="hint"></p>
+    <dl id="values"></dl>
+    <div id="keys"></div>
+</aside>
+<div id="confirm" hidden>
+    <div class="card">
+        <div class="kicker">Wizard do porta-malas</div>
+        <h2 id="confirm-title"></h2>
+        <p id="confirm-text"></p>
+        <div id="confirm-keys"></div>
+    </div>
+</div>
+<script src="wizard.js"></script>
+</body>
+</html>

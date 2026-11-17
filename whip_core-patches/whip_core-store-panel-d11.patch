@@ -1,0 +1,263 @@
+# whip_core-store-panel-d11 (LGPL, como o whip_core): abrir bolsa/caixa (RegisterPanelItem) dentro de um store
+# aberto (porta-malas, stash), como o host 'ground' do whip_core-ground-panel-d11. Host container 'store' + store
+# { kind, id, sub }; evento whip_core:server:openStorePanel(storeId, slot); peso contra o store; Stores.setItemMetadataAt.
+# Aplicar a partir de resources/:  patch -p1 < whip_core-store-panel-d11.patch   (backup: _backups/whip_core-store-panel-20261116)
+--- a/whip_core/server/panels.lua
++++ b/whip_core/server/panels.lua
+@@ -242,21 +242,42 @@
+ ---@param container string  the pocket
+ ---@param slot number
+ ---@param sd table  the slot's contents
++---@param store table|nil  D11: { kind, id, sub } do store quando container = 'store'
+ ---@return table host
+-local function panelHost(source, container, slot, sd)
++local function panelHost(source, container, slot, sd, store)
++    local addr
++    if container == 'ground' then
++        -- D11: uma bolsa no chao e host com container 'ground' e slot = id da pilha (GroundItems).
++        addr = { kind = 'ground', id = slot }
++    elseif container == 'store' and store then
++        -- D11 (whip_core-store-panel-d11): bolsa dentro de um store (porta-malas, stash), container 'store'.
++        addr = { kind = store.kind, id = store.id, sub = store.sub, slot = slot }
++    else
++        addr = { kind = 'player', id = source, sub = container, slot = slot }
++    end
+     return {
+         source    = source,
+         container = container,
+         slot      = slot,
+-        -- D11: uma bolsa no chao e host com container 'ground' e slot = id da pilha (GroundItems).
+-        addr      = container == 'ground' and { kind = 'ground', id = slot }
+-            or { kind = 'player', id = source, sub = container, slot = slot },
++        store     = store,
++        addr      = addr,
+         item      = sd.item,
+         amount    = sd.amount,
+         metadata  = sd.metadata or {},
+     }
+ end
+ 
++--- D11 (whip_core-store-panel-d11): o store onde fica a bolsa de um painel com host 'store', checado como o cliente
++--- pediria (Stores.fromWire: ainda aberto por este jogador, perto, nao so-leitura). Sem slot: o store inteiro.
++---@param source number
++---@param store table  { kind, id, sub }
++---@return table|nil
++function Panels.hostStoreOf(source, store)
++    if type(store) ~= 'table' then return nil end
++    local s = Stores.fromWire(source, { kind = store.kind, id = store.id, sub = store.sub }, { slotOptional = true })
++    return s
++end
++
+ --- What a RegisterPanelItem panel shows for its host item: the registration's read(), or the
+ --- plain slot array at meta[storageKey]. Returns nil plus the error when read() fails.
+ ---@param reg table  the registration
+@@ -803,6 +824,31 @@
+         return sd.metadata ~= nil and sd.metadata.uid == h.uid
+     end
+ 
++    -- D11 (whip_core-store-panel-d11): num store, o jogador ainda o tem aberto e perto (Stores.fromWire); a bolsa e
++    -- seguida pelo uid dentro do store e, pega para os bolsos, nos bolsos (busca abaixo).
++    if h.container == 'store' then
++        local store = Panels.hostStoreOf(source, h.store)
++        if store then
++            local sd = store.kind.get(store.handle, h.slot)
++            if isHost(sd) then return panelHost(source, 'store', h.slot, sd, h.store) end
++            if h.uid ~= nil then
++                for s = 1, store.kind.slots(store.handle) do
++                    local other = store.kind.get(store.handle, s)
++                    if isHost(other) then
++                        h.slot = s
++                        return panelHost(source, 'store', s, other, h.store)
++                    end
++                end
++            end
++        end
++        if h.uid == nil then return nil end
++        local gc, gs, gst = h.container, h.slot, h.store
++        h.container, h.slot, h.store = PlayerContainers[1], -1, nil
++        local found = Panels.resolveHost(source, session)
++        if not found then h.container, h.slot, h.store = gc, gs, gst end
++        return found
++    end
++
+     -- D11: no chao, a pilha tem de estar ali, parada e ao alcance. Pegada pelo proprio jogador, o painel a segue
+     -- para os bolsos (busca pelo uid abaixo); levada por outro, longe ou no ar, some para este painel.
+     if h.container == 'ground' then
+@@ -938,6 +984,12 @@
+         local okG, whyG = GroundItems.setItem(host.slot, host.item, host.amount, newMeta)
+         if not okG then return false, whyG end
+         stored = GroundItems.getById(host.slot)
++    elseif host.container == 'store' then
++        -- D11 (whip_core-store-panel-d11): bolsa num store. Pelo mesmo caminho do SetItemMetadata (o set do kind, o
++        -- save e quem esta vendo o store redesenhado). O peso ja foi conferido no beforeMove do painel.
++        local okS, whyS = Stores.setItemMetadataAt(host.addr, newMeta, { replace = true })
++        if not okS then return false, whyS end
++        stored = Stores.itemAt(host.addr)
+     else
+         Inventory.setSlot(player.inventory, host.container, host.slot,
+             host.item, host.amount, newMeta)
+@@ -948,7 +1000,7 @@
+     -- Panels.refreshFromHost. Read back through the projection rather than copied from the panel:
+     -- write() may add to what it was given (gunny mints a magazine's serial here).
+     local after = stored and projectHost(reg, session.host.storageKey,
+-        panelHost(source, host.container, host.slot, stored))
++        panelHost(source, host.container, host.slot, stored, host.store))
+     session.base = after and snapshotItems(after) or nil
+ 
+     -- A reply only when this fold IS the answer the NUI is waiting for (see the panel kind's
+@@ -1172,10 +1224,10 @@
+ 
+     -- The opener for THIS item. Registered into a per-action table below rather than straight
+     -- onto the action, so a family of items can share one context action.
+-    local function openThisItem(source, _, slotData, container, slot)
++    local function openThisItem(source, _, slotData, container, slot, store)
+         if not slotData or slotData.item ~= itemKey then return end
+ 
+-        local host = panelHost(source, container, slot, slotData)
++        local host = panelHost(source, container, slot, slotData, store)
+         local meta = host.metadata
+ 
+         -- Not an item whose contents could not be saved (Panels.foldFailed): its metadata still shows
+@@ -1252,6 +1304,7 @@
+             session.host = {
+                 container = container,
+                 slot      = slot,
++                store     = store,   -- D11: { kind, id, sub } quando container = 'store'
+                 itemKey   = itemKey,
+                 storageKey = storageKey,
+                 uid       = hostUid,   -- what Panels.resolveHost matches on; see there
+@@ -1359,6 +1412,59 @@
+ end)
+ 
+ -- ============================================
++-- D11 (whip_core-store-panel-d11): abrir item-painel que esta num store (bolsa no porta-malas, numa stash)
++-- ============================================
++-- O cliente manda o store como o renderer o conhece ('vehicle:<id>:trunk|glovebox' ou 'container:<id>') e o slot.
++-- Vale o que vale para mover ali (Stores.fromWire: aberto por este jogador, perto, nao so-leitura), e so um jogador
++-- por vez na mesma bolsa: dois paineis gravariam um por cima do outro.
++SecureEvent('whip_core:server:openStorePanel', {
++    rateLimit = 500,
++    params = { {'storeId', 'string', 64}, {'slot', 'int', 1, 1000} },
++}, function(source, player, storeId, slot)
++    if not player.inventory then return end
++    local kind, id, sub = storeId:match('^(vehicle):(%d+):(%a+)$')
++    if not kind then kind, id = storeId:match('^(container):(%d+)$') end
++    if not kind then return false, 'Isso não abre aqui' end
++    local where = { kind = kind, id = tonumber(id), sub = sub }
++    local store, s, err = Stores.fromWire(source, { kind = kind, id = where.id, sub = sub, slot = slot })
++    if not store then return false, err or 'Isso não está aberto para você' end
++    local sd = store.kind.get(store.handle, s)
++    if not sd or not sd.item then return false, 'O item não existe mais' end
++
++    local def = Config.Items[sd.item]
++    local byItem = def and def.defaultAction and _panelItemActions[def.defaultAction]
++    local opener = byItem and byItem[sd.item]
++    if not opener then
++        for _, list in pairs(_panelItemActions) do
++            if list[sd.item] then opener = list[sd.item] break end
++        end
++    end
++    if not opener then return false, 'Isso não abre' end
++
++    local uid = sd.metadata and sd.metadata.uid
++    for src, mine in pairs(Panels._sessions) do
++        if src ~= source then
++            for _, sess in pairs(mine) do
++                local h = sess.host
++                if h and h.container == 'store' and h.store and h.store.kind == kind and tostring(h.store.id) == id
++                    and h.store.sub == sub and (h.slot == s or (uid ~= nil and h.uid == uid)) then
++                    return false, 'Outra pessoa está mexendo nisso'
++                end
++            end
++        end
++    end
++
++    -- O painel segue a bolsa pelo uid (Panels.resolveHost): sem uid, ganha um, gravado no store.
++    if uid == nil then
++        local okU = Stores.setItemMetadataAt({ kind = kind, id = where.id, sub = sub, slot = s }, { uid = Log.newUid() })
++        if not okU then return false, 'Não deu para abrir agora' end
++        sd = store.kind.get(store.handle, s)
++        if not sd or not sd.item then return false, 'O item não existe mais' end
++    end
++    opener(source, player, sd, 'store', s, where)
++end)
++
++-- ============================================
+ -- OpenPanel Close Event (client → server)
+ -- ============================================
+ 
+--- a/whip_core/server/stores.lua
++++ b/whip_core/server/stores.lua
+@@ -552,6 +552,11 @@
+     local h = inner.handle
+     local host = h and h.session and h.session.host
+     if not host or not host.container then return false end
++    -- D11 (whip_core-store-panel-d11): a bolsa num store ja pesa nele.
++    if host.container == 'store' then
++        local s = Panels.hostStoreOf(h.source, host.store)
++        return s ~= nil and s.id == outer.id
++    end
+     local hostStore = Stores.open('player', { source = h.source, container = host.container })
+     return hostStore ~= nil and hostStore.id == outer.id
+ end
+@@ -1414,7 +1419,20 @@
+             -- pockets and the accessory strip have separate limits).
+             local otherKind = ctx.other and ctx.other.kind.id
+             local alreadyCarried = false
+-            if otherKind == 'player' then
++            -- D11 (whip_core-store-panel-d11): bolsa num store. O que vem do proprio store (ou de outra bolsa nele) ja
++            -- pesa nele; o resto e pesado contra o limite do store.
++            local inStore = host.container == 'store' and Panels.hostStoreOf(h.source, host.store) or nil
++            if host.container == 'store' and not inStore then return false, 'That is no longer open' end
++            if inStore then
++                if ctx.other and ctx.other.id == inStore.id then
++                    alreadyCarried = true
++                elseif otherKind == 'panel' and ctx.other.handle.source == h.source and ctx.other.handle.session.host ~= nil then
++                    local otherHost = Panels.resolveHost(h.source, ctx.other.handle.session)
++                    alreadyCarried = otherHost ~= nil and otherHost.container == 'store' and otherHost.store ~= nil
++                        and Panels.hostStoreOf(h.source, otherHost.store) ~= nil
++                        and Panels.hostStoreOf(h.source, otherHost.store).id == inStore.id
++                end
++            elseif otherKind == 'player' then
+                 alreadyCarried = ctx.other.handle.container == host.container
+             elseif otherKind == 'panel' and ctx.other.handle.source == h.source and ctx.other.handle.session.host ~= nil then
+                 local otherHost = Panels.resolveHost(h.source, ctx.other.handle.session)
+@@ -1428,7 +1446,7 @@
+             end
+ 
+             if ctx.direction == 'in' and ctx.other and not alreadyCarried then
+-                local hostStore = Stores.player(h.source, host.container)
++                local hostStore = inStore or Stores.player(h.source, host.container)
+                 local adding = itemWeight(ctx.item, ctx.amount, ctx.metadata)
+                 if hostStore and (adding == nil
+                     or Stores.weightOf(hostStore) + adding > hostStore.kind.maxWeight(hostStore.handle)
+@@ -1554,7 +1572,8 @@
+     if not host.container or not host.slot then return nil end
+ 
+     -- Compare store identities rather than rebuilding the kind's id format here.
+-    local hostStore = Stores.open('player', { source = h.source, container = host.container })
++    local hostStore = host.container == 'store' and Panels.hostStoreOf(h.source, host.store)   -- D11 store-panel
++        or Stores.open('player', { source = h.source, container = host.container })
+     if not hostStore then return nil end
+ 
+     if from.store.id == hostStore.id and from.slot == host.slot then
+@@ -5013,7 +5032,8 @@
+ ---@param opts table|nil  { replace = boolean, remove = string[], quiet = boolean }
+ ---@return boolean ok
+ ---@return string|nil err
+-exports('SetItemMetadata', function(addr, metadata, opts)
++-- D11 (whip_core-store-panel-d11): tambem como Stores.setItemMetadataAt, para o painel com host num store.
++function Stores.setItemMetadataAt(addr, metadata, opts)
+     local store, slot, err = slotOf(addr)
+     if not store then return false, err end
+     opts = type(opts) == 'table' and opts or {}
+@@ -5062,7 +5082,8 @@
+     end
+     finishDirectWrite(store, { slot })
+     return true
+-end)
++end
++exports('SetItemMetadata', Stores.setItemMetadataAt)
+ 
+ --- Where the first item `has(d)` is true of is: `{ kind, id, sub?, slot }`, or nil. Looks through what is loaded
+ --- (online pockets, in-memory stashes, boots and panels, the ground); an item in an untouched stash or inside a bag

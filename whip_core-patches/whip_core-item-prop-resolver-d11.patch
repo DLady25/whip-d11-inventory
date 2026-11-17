@@ -1,0 +1,18 @@
+--- a/whip_core/client/inventory.lua
++++ b/whip_core/client/inventory.lua
+@@ -1879,6 +1879,15 @@ local propWarned = {}
+ ---@param itemKey string
+ ---@return string
+ function Inventory.itemPropModel(itemKey)
++    -- D11 patch (docs/patches/whip_core-item-prop-resolver-d11.patch, LGPL): a resource named by
++    -- `setr whip_item_prop_resolver <resource>` may pick the model (its export ItemPropModel(itemKey) answers a model
++    -- name, or nil to keep the item's own prop), so the ground and the hand show what that resource shows elsewhere.
++    local resolver = GetConvar('whip_item_prop_resolver', '')
++    if resolver ~= '' and GetResourceState(resolver) == 'started' then
++        local ok, model = pcall(function() return exports[resolver]:ItemPropModel(itemKey) end)
++        if ok and type(model) == 'string' and model ~= '' and IsModelInCdimage(GetHashKey(model)) then return model end
++    end
++
+     local def = Config.Items[itemKey]
+     local want = def and def.prop or nil
+ 

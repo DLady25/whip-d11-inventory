@@ -27,9 +27,10 @@ Depois de editar: `ensure d11_inventory` (o WHIP recarrega o renderer em quem es
 | Cabeçalho | Marca, "INVENTÁRIO", campo de quantidade (Dar/Dividir), `?` com os atalhos, `Esc` |
 | Ficha | Nome, conta, ID; chips Em mãos (dinheiro nos bolsos e acessórios), Itens, Carga |
 | Equipado | Seção da ficha, abaixo de uma linha: contador ocupados/total, cada encaixe com o nome por baixo e barra azul quando ocupado. Hierarquia: ficha > equipado > bolsos (Mochila › Bolsos) > acesso rápido |
+| Equipamento | Na faixa Equipado, depois de um divisor (slots 17+; nomes só no hover, ícone no encaixe vazio): Rádio, Colete, Arma branca, Pistola/Sub, Rifle. Lista em `D11Inventory.GearSlots` (config.lua), registrada com `RegisterAccessorySlot`; o whip_core recusa item errado. Precisa de `Config.ContainerSlots.accessory = 21` (e `MaxWeight.accessory` 25) no whip_core |
 | Controle (gamepad) | Cursor sempre disponível, no esquema do WHIP: LS move (desacelera em cima de slot), A segurado arrasta / toque clica / dois toques usa, X opções (arrastando: move só um), Y usa, RB+A envia, B fecha menu → solta → fecha, D-pad pula de slot em slot (ou ajusta a quantidade num campo), LB/RB troca de coluna. Dicas de botão na faixa do WHIP. Mexer o mouse esconde o cursor |
 | Grade | 5 colunas, slot em faixas: tipo (letra) + peso + quantidade em cima, imagem, nome + tipo embaixo; raridade (`metadata.rarity`) como moldura; carga em azul com barra fina |
-| Acesso rápido | Cartão embaixo com os slots 1-5 (a hotbar do WHIP) |
+| Acesso rápido | Sem cartão próprio: o slot que cada tecla 1-5 usa mostra o número no canto. Com `docs/patches/whip_core-hotbar-slots-d11.patch` + `Config.HotbarSlots`, 1-3 sacam as armas do equipamento (branca, pistola/sub, rifle) e 4-5 usam os bolsos 4-5; sem o patch, bolsos 1-5 |
 | Externos | Baú / porta-malas / porta-luvas com título e carga; ignição; painéis (carteira, mochila); chão ("Por perto"); revista de outro jogador; preço no modo estoque de loja |
 | Interações | Arrastar (bota em cima: mesmo movimento do WHIP; vermelho quando o WHIP recusaria), botão direito arrastando = um, Shift+clique = enviar, duplo clique = usar, botão direito = opções do WHIP (Dar/Dividir pedem quantidade), dica ao passar o mouse, aviso quando o servidor recusa |
 
@@ -43,7 +44,7 @@ Depois de editar: `ensure d11_inventory` (o WHIP recarrega o renderer em quem es
 ## Conferido
 
 Na prévia oficial do WHIP (`whip_core/dev/inventory-preview/preview.js d11_inventory
---resources D:\Server\WHIP_LEGACY\themes`): cenas bolsos+chão, baú+carteira, carro (porta-luvas e
+--resources <pasta com o d11_inventory>`): cenas bolsos+chão, baú+carteira, carro (porta-luvas e
 ignição); arrastar enviou `moveItem`, Shift+clique `dropToGround`, Dividir `splitItem` (padrão metade),
 menu e dica corretos. Controle (mensagens `navInput`/`navAnalog` como o jogo manda): D-pad, X abre o
 menu, B fecha, dicas na faixa, arrasto com A segurado + analógico trocou os slots 1 e 2. Não testado no jogo.
