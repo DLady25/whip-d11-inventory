@@ -160,7 +160,8 @@ export default function createRenderer({ api, mount, close, addStylesheet, signa
         const el = div('d11-slot' + (opts.small ? ' small' : ''));
         el.dataset.c = container;
         el.dataset.s = String(slot);
-        if (opts.key != null) el.appendChild(span('d11-key', String(opts.key)));
+        // tecla de uso rapido: no canto do slot pequeno ou vazio; no slot cheio da grade, no lugar do emblema
+        if (opts.key != null && (opts.small || !d)) el.appendChild(span('d11-key', String(opts.key)));
         if (!d) { el.classList.add('empty'); return el; }
 
         const def = defs()[d.item] || {};
@@ -178,7 +179,7 @@ export default function createRenderer({ api, mount, close, addStylesheet, signa
 
         if (!opts.small) {
             const top = div('d11-slot-top');
-            top.appendChild(span('d11-emblem', t[0]));
+            top.appendChild(opts.key != null ? span('d11-key in-top', String(opts.key)) : span('d11-emblem', t[0]));
             const kg = d.w != null ? d.w : (Number(def.weight) || 0) * (Number(d.amount) || 1);
             const info = div('d11-slot-info');
             info.appendChild(span('d11-weight', fmtKg(kg)));
@@ -228,7 +229,11 @@ export default function createRenderer({ api, mount, close, addStylesheet, signa
     function grid(container, count, cols, opts) {
         const g = div('d11-grid');
         g.style.setProperty('--cols', String(cols));
-        for (let s = 1; s <= count; s++) g.appendChild(slotEl(container, s, opts));
+        // bolsos 1-5: numero da tecla de uso rapido no canto (o cartao "Acesso rapido" saiu)
+        for (let s = 1; s <= count; s++) {
+            const key = container === 'player' && s <= HOTBAR ? { key: s } : null;
+            g.appendChild(slotEl(container, s, key ? Object.assign({}, opts, key) : opts));
+        }
         return g;
     }
 
@@ -429,18 +434,6 @@ export default function createRenderer({ api, mount, close, addStylesheet, signa
         return c;
     }
 
-    function hotbarCard() {
-        const c = card('d11-hotbar');
-        const lab = div('d11-hotbar-label');
-        lab.appendChild(div('d11-kicker', T('Acesso rápido')));
-        lab.appendChild(div('d11-hotbar-sub', T('Slots 1-') + HOTBAR));
-        c.appendChild(lab);
-        const row = div('d11-hotbar-row');
-        for (let s = 1; s <= HOTBAR; s++) row.appendChild(slotEl('player', s, { small: true, key: s }));
-        c.appendChild(row);
-        return c;
-    }
-
     function externalCards() {
         const i = inv();
         const out = [];
@@ -574,7 +567,6 @@ export default function createRenderer({ api, mount, close, addStylesheet, signa
         left.appendChild(shellHeader());
         left.appendChild(characterCard());
         left.appendChild(pocketsCard());
-        left.appendChild(hotbarCard());
 
         const right = div('d11-col d11-right');
         for (const c of externalCards()) right.appendChild(c);

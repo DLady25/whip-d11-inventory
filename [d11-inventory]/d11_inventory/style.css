@@ -2,7 +2,7 @@
    d11_inventory — inventario D11 (variante escura)
    Origem: resources/[ox]/ox_inventory/web/build/assets/d11-hud-theme.css @ bc7f7683d ([I]).
    Medidas da VPS em 1920x1080 (1rem = 16px): coluna do jogador em left 24px, 605px de largura,
-   topo 54px; externo a direita com 566px; slot ~108px; hotbar como cartao embaixo.
+   topo 54px; externo a direita com 566px; slot ~108px; teclas 1-5 marcadas nos bolsos.
    Aqui 1em = 16px a 1080p e escala com a altura da tela, como o rem do ox_inventory.
    ======================================== */
 
@@ -203,7 +203,7 @@
 .d11-slot.rarity-epic { box-shadow: inset 0 0 0 1px rgba(170, 120, 230, .8); }
 .d11-slot.rarity-legendary { box-shadow: inset 0 0 0 1px rgba(231, 199, 121, .85); }
 
-/* slot pequeno: hotbar, acessorios, ignicao */
+/* slot pequeno: acessorios, ignicao */
 .d11-slot.small { width: 3.4em; height: 3.4em; flex: none; }
 .d11-slot.small .d11-img { top: 50%; width: 70%; height: 70%; }
 /* foto real da peca de roupa (metadata.foto do d11_clothing): ocupa quase todo o ladrilho */
@@ -214,14 +214,9 @@
     background: var(--dark); color: var(--ink); display: grid; place-items: center;
     font: italic 700 .55em/1 'D11 Display', sans-serif;
 }
-.d11-slot.small.empty .d11-key { background: var(--neutral); color: var(--faint); }
+.d11-slot.empty .d11-key { background: var(--neutral); color: var(--faint); }
+.d11-key.in-top { position: static; }
 
-/* ---------- hotbar ([I] janela .hotbar-container) ---------- */
-.d11-hotbar { display: flex; align-items: center; gap: 1em; flex: none; }
-.d11-hotbar-label { display: flex; flex-direction: column; gap: .3em; min-width: 6.5em; }
-.d11-hotbar-sub { font: 600 .6em/1 'D11 Text', sans-serif; color: var(--faint); text-transform: uppercase; letter-spacing: .06em; }
-.d11-hotbar-row { display: flex; gap: .35em; flex: 1; }
-.d11-hotbar-row .d11-slot.small { flex: 1; width: auto; height: 3.6em; }
 
 /* ---------- ignicao ---------- */
 .d11-ignition { display: flex; align-items: center; justify-content: space-between; }

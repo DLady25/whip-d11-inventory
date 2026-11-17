@@ -5,7 +5,7 @@ lua54 'yes'
 name 'd11_inventory'
 description 'Inventario D11 do WHIP (renderer: so desenha; estado, regras e servidor seguem no whip_core).'
 author 'D11'
-version '1.2.0'
+version '1.2.1'
 
 -- Ativar: setr whip_inventory_renderer d11_inventory (server.cfg) ou Config.InventoryRenderer.
 -- whip_core importa https://cfx-nui-d11_inventory/renderer.js (docs/nui-inventory.md).
