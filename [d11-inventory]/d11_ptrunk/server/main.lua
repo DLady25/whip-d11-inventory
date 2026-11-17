@@ -1,6 +1,9 @@
 -- d11_ptrunk (servidor): abre o store nativo do porta-malas, guarda quem esta no modo fisico de cada carro e a pose
 -- de cada item (onde o jogador deixou o objeto). O inventario (mover, pesar, empilhar, trava do carro, log) e todo
 -- do WHIP. Um jogador por carro no modo fisico (decisao 3 do plano); quem chega depois ve o porta-malas normal.
+-- Idioma: setr d11_locale en | pt-BR (padrao en), como o config.lua.
+local PT_BR = GetConvar('d11_locale', 'en') == 'pt-BR'
+local function L(en, pt) return PT_BR and pt or en end
 local W = exports.whip_core
 
 local holder = {}   -- [vehicleId] = src no modo fisico
@@ -210,18 +213,18 @@ local function onFromGround(src, _, vehicleId, groundId)
     local g = W:GetGroundItem(groundId)
     local snap = W:GetVehicle(vehicleId)
     local veh = snap and snap.netId and NetworkGetEntityFromNetworkId(snap.netId)
-    if not g or not veh or veh == 0 or not DoesEntityExist(veh) then return false, 'Esse item não está mais no chão.' end
+    if not g or not veh or veh == 0 or not DoesEntityExist(veh) then return false, L('That item is not on the ground any more.', 'Esse item não está mais no chão.') end
     local at = vector3(g.x, g.y, g.z)
     if #(GetEntityCoords(veh) - at) > Config.GroundReach + 1.0 or #(GetEntityCoords(GetPlayerPed(src)) - at) > 8.0 then
         return false, 'Longe demais.'
     end
-    if not W:DeleteGroundItem(groundId) then return false, 'Esse item não está mais no chão.' end
+    if not W:DeleteGroundItem(groundId) then return false, L('That item is not on the ground any more.', 'Esse item não está mais no chão.') end
     local slot = W:StoreGive({ kind = 'vehicle', id = vehicleId, sub = 'trunk' }, g.item, g.amount, g.metadata,
         'd11_ptrunk: do chao')
     if not slot then
         W:CreateGroundItem({ item = g.item, amount = g.amount, metadata = g.metadata, coords = at, heading = g.heading,
             reason = 'd11_ptrunk: porta-malas cheio' })
-        return false, 'Não cabe no porta-malas.'
+        return false, L('It does not fit in the trunk.', 'Não cabe no porta-malas.')
     end
 end
 
@@ -274,11 +277,11 @@ end
 --- outro jogador ja pegou, nada acontece) e poe no slot pedido, ou onde couber; sem espaco, volta para o chao.
 local function onGroundTake(src, _, groundId, to, slot)
     local g = W:GetGroundItem(groundId)
-    if not g then return false, 'Esse item não está mais no chão.' end
+    if not g then return false, L('That item is not on the ground any more.', 'Esse item não está mais no chão.') end
     if not nearPed(src, vector3(g.x, g.y, g.z), Config.GroundFree.reach + 1.0) then return false, 'Longe demais.' end
     local addr = openStoreAddr(src, to)
     if not addr then return false end
-    if not W:DeleteGroundItem(groundId) then return false, 'Esse item não está mais no chão.' end
+    if not W:DeleteGroundItem(groundId) then return false, L('That item is not on the ground any more.', 'Esse item não está mais no chão.') end
     local put
     if slot and slot > 0 then
         local exact = {}
@@ -290,7 +293,7 @@ local function onGroundTake(src, _, groundId, to, slot)
     if not put then
         W:CreateGroundItem({ item = g.item, amount = g.amount, metadata = g.metadata, coords = vector3(g.x, g.y, g.z),
             heading = g.heading, reason = 'd11_ptrunk: nao coube' })
-        return false, 'Não cabe aí.'
+        return false, L('It does not fit there.', 'Não cabe aí.')
     end
 end
 
@@ -352,7 +355,8 @@ RegisterCommand('ptrunkphysics', function(src, args)
     if a == 'on' or a == '1' or a == 'true' or a == 'ligar' then enabled = true
     elseif a == 'off' or a == '0' or a == 'false' or a == 'desligar' then enabled = false end
     GlobalState.d11PtrunkPhysicsEnabled = enabled
-    say(src, enabled and 'Física dos objetos do porta-malas LIGADA.' or 'Física dos objetos do porta-malas DESLIGADA.',
+    say(src, enabled and L('Trunk prop physics ON.', 'Física dos objetos do porta-malas LIGADA.')
+        or L('Trunk prop physics OFF.', 'Física dos objetos do porta-malas DESLIGADA.'),
         enabled and 'success' or 'info')
 end, false)
 
@@ -398,8 +402,8 @@ for name, list in pairs(DEMOS) do
                 missing[#missing + 1] = e[1]
             end
         end
-        say(src, ('%s: %d/%d itens.%s'):format(name, given, #list,
-            #missing > 0 and (' Fora do catálogo do WHIP: ' .. table.concat(missing, ', ')) or ''),
+        say(src, (L('%s: %d/%d items.%s', '%s: %d/%d itens.%s')):format(name, given, #list,
+            #missing > 0 and (L(' Not in WHIP\'s catalogue: ', ' Fora do catálogo do WHIP: ') .. table.concat(missing, ', ')) or ''),
             given > 0 and 'success' or 'error')
     end, false)
 end
@@ -408,11 +412,11 @@ end
 RegisterCommand('ptrunkrepack', function(src)
     if src == 0 or not admin(src) then return end
     local h = held[src]
-    if not h then return say(src, 'Abra o porta-malas no modo físico antes de usar /ptrunkrepack.', 'error') end
+    if not h then return say(src, L('Open the trunk in physical mode before /ptrunkrepack.', 'Abra o porta-malas no modo físico antes de usar /ptrunkrepack.'), 'error') end
     poses[h.vehicleId] = {}
     MySQL.update('DELETE FROM d11_ptrunk_pose WHERE vehicle_id = ?', { h.vehicleId })
     TriggerClientEvent('d11_ptrunk:client:repack', src, h.vehicleId)
-    say(src, 'Repack: os objetos voltaram para a arrumação automática.', 'success')
+    say(src, L('Repack: the props went back to the automatic packing.', 'Repack: os objetos voltaram para a arrumação automática.'), 'success')
 end, false)
 
 -- ------------------------------------------------------------------ perfis por modelo (fase 4)
@@ -500,14 +504,14 @@ end
 
 --- { modelHash, camera?, spawn?, light? }: grava o que veio (so admin) e manda para todo mundo.
 local function onSaveProfiles(src, player, data)
-    if not canCalibrate(src) then return false, 'Sem permissão para calibrar o porta-malas.' end
+    if not canCalibrate(src) then return false, L('No permission to calibrate trunks.', 'Sem permissão para calibrar o porta-malas.') end
     local hash = math.tointeger(tonumber(data.modelHash))
-    if not hash then return false, 'Modelo inválido.' end
+    if not hash then return false, L('Invalid model.', 'Modelo inválido.') end
     local saved = { modelHash = hash }
     for kind in pairs(KINDS) do
         if type(data[kind]) == 'table' then
             local clean = CLEAN[kind](data[kind])
-            if not clean then return false, ('Perfil de %s inválido.'):format(kind) end
+            if not clean then return false, (L('Invalid %s profile.', 'Perfil de %s inválido.')):format(kind) end
             saved[kind] = clean
         end
     end
@@ -515,7 +519,7 @@ local function onSaveProfiles(src, player, data)
         if saved[kind] then storeProfile(kind, hash, saved[kind], player and player.charId or nil) end
     end
     TriggerClientEvent('d11_ptrunk:client:profiles', -1, saved)
-    W:NotifyPlayer(src, 'Perfil do porta-malas salvo.', 'success')
+    W:NotifyPlayer(src, L('Trunk profile saved.', 'Perfil do porta-malas salvo.'), 'success')
 end
 
 -- /ptrunkimport: traz as calibracoes da D12 de arquivos que o usuario copiou para d11_ptrunk/import/:
@@ -551,16 +555,17 @@ RegisterCommand('ptrunkimport', function(src)
         end
     end
     local cfg, err = readD12('config.lua')
-    if err then return say(src, 'import/config.lua com erro: ' .. tostring(err), 'error') end
+    if err then return say(src, L('import/config.lua has an error: ', 'import/config.lua com erro: ') .. tostring(err), 'error') end
     local veh, err2 = readD12('vehicle_profiles.lua')
-    if err2 then return say(src, 'import/vehicle_profiles.lua com erro: ' .. tostring(err2), 'error') end
+    if err2 then return say(src, L('import/vehicle_profiles.lua has an error: ', 'import/vehicle_profiles.lua com erro: ') .. tostring(err2), 'error') end
     if not cfg and not veh then
-        return say(src, 'Nada para importar: copie config.lua e/ou vehicle_profiles.lua da D12 para d11_ptrunk/import/.', 'error')
+        return say(src, L('Nothing to import: copy velocity-physicaltrunk\'s config.lua and/or vehicle_profiles.lua into d11_ptrunk/import/.',
+            'Nada para importar: copie config.lua e/ou vehicle_profiles.lua da D12 para d11_ptrunk/import/.'), 'error')
     end
     if cfg then take('spawn', cfg.ItemSpawnProfiles); take('light', cfg.TrunkLightProfiles) end
     if veh then take('camera', veh.ModelProfiles) end
     TriggerClientEvent('d11_ptrunk:client:profilesReload', -1)
-    say(src, ('Importado da D12: %d câmeras, %d áreas, %d luzes (%d ignorados).')
+    say(src, (L('Imported: %d cameras, %d areas, %d lights (%d skipped).', 'Importado da D12: %d câmeras, %d áreas, %d luzes (%d ignorados).'))
         :format(total.camera, total.spawn, total.light, skipped), 'success')
 end, false)
 
@@ -613,7 +618,7 @@ RegisterCommand('ptrunkexport', function(src, args)
     end
     local list = {}
     for hash, v in pairs(cars) do list[#list + 1] = { hash = hash, name = names[hash], v = v } end
-    if #list == 0 then return say(src, 'Nada no banco para exportar: calibre um carro com o wizard primeiro.', 'error') end
+    if #list == 0 then return say(src, L('Nothing in the database to export: calibrate a car with the wizard first.', 'Nada no banco para exportar: calibre um carro com o wizard primeiro.'), 'error') end
     table.sort(list, function(a, b) return (a.name or tostring(a.hash)) < (b.name or tostring(b.hash)) end)
     local lines = {
         '-- d11_ptrunk: perfis exportados do banco por /ptrunkexport em ' .. os.date('%Y-%m-%d %H:%M') .. '.',
@@ -634,10 +639,10 @@ RegisterCommand('ptrunkexport', function(src, args)
     lines[#lines + 1] = '}'
     local file = ('export/profiles_%s.lua'):format(os.date('%Y%m%d_%H%M%S'))
     if not SaveResourceFile(GetCurrentResourceName(), file, table.concat(lines, '\n') .. '\n', -1) then
-        return say(src, 'Não deu para gravar ' .. file .. '.', 'error')
+        return say(src, L('Could not write ', 'Não deu para gravar ') .. file .. '.', 'error')
     end
-    say(src, ('%d carro(s) exportado(s) em d11_ptrunk/%s%s.'):format(#list, file,
-        unnamed > 0 and (' (%d pelo hash: passe o nome no comando)'):format(unnamed) or ''), 'success')
+    say(src, (L('%d car(s) exported to d11_ptrunk/%s%s.', '%d carro(s) exportado(s) em d11_ptrunk/%s%s.')):format(#list, file,
+        unnamed > 0 and (L(' (%d by hash: pass their names to the command)', ' (%d pelo hash: passe o nome no comando)')):format(unnamed) or ''), 'success')
 end, false)
 
 CreateThread(function()
@@ -722,8 +727,8 @@ end)
 -- perfis. Problema = algo nao funciona; aviso = uma parte fica sem (o resto funciona).
 local PATCHES = {
     { 'trunk-opener', 'client/vehicle_prompts.lua', 'whip_trunk_opener', true },
-    { 'ground-physics (cliente)', 'client/ground.lua', 'HoldGroundProp', true },
-    { 'ground-physics (servidor)', 'server/ground.lua', 'MoveGroundItem', true },
+    { 'ground-physics (client)', 'client/ground.lua', 'HoldGroundProp', true },
+    { 'ground-physics (server)', 'server/ground.lua', 'MoveGroundItem', true },
     { 'item-prop-resolver', 'client/inventory.lua', 'whip_item_prop_resolver', false },
     { 'item-prop-amount', 'client/inventory.lua', 'ItemPropModel(itemKey, amount)', false },
     { 'store-panel', 'server/panels.lua', 'openStorePanel', false },
@@ -739,31 +744,33 @@ RegisterCommand('ptrunkpreflight', function(src)
             else warns[#warns + 1] = failText end
         end
         for _, res in ipairs({ { 'whip_core', true }, { 'oxmysql', true }, { 'd11_inventory', true }, { 'd11_bags', false } }) do
-            check(GetResourceState(res[1]) == 'started', res[1] .. ' iniciado', res[1] .. ' não está iniciado', res[2])
+            check(GetResourceState(res[1]) == 'started', res[1] .. L(' started', ' iniciado'), res[1] .. L(' is not started', ' não está iniciado'), res[2])
         end
         check(GetConvar('whip_trunk_opener', '') == 'd11_ptrunk', 'setr whip_trunk_opener d11_ptrunk',
-            'falta setr whip_trunk_opener d11_ptrunk no server.cfg (o "Ver porta-malas" abre o do WHIP)', true)
+            L('missing setr whip_trunk_opener d11_ptrunk in server.cfg ("View trunk" opens WHIP\'s own)',
+            'falta setr whip_trunk_opener d11_ptrunk no server.cfg (o "Ver porta-malas" abre o do WHIP)'), true)
         check(GetConvar('whip_item_prop_resolver', '') == 'd11_ptrunk', 'setr whip_item_prop_resolver d11_ptrunk',
-            'falta setr whip_item_prop_resolver d11_ptrunk (chão e mão com o modelo do catálogo do WHIP)', false)
+            L('missing setr whip_item_prop_resolver d11_ptrunk (ground and hand use the WHIP catalogue model)',
+            'falta setr whip_item_prop_resolver d11_ptrunk (chão e mão com o modelo do catálogo do WHIP)'), false)
         for _, p in ipairs(PATCHES) do
             local src2 = LoadResourceFile('whip_core', p[2]) or ''
             check(src2:find(p[3], 1, true) ~= nil, 'patch ' .. p[1],
-                ('patch %s ausente em whip_core/%s (docs/patches/whip_core-%s-d11.patch)'):format(p[1], p[2], p[1]:match('^%S+')), p[4])
+                (L('patch %s missing in whip_core/%s (whip_core-patches/whip_core-%s-d11.patch)', 'patch %s ausente em whip_core/%s (docs/patches/whip_core-%s-d11.patch)')):format(p[1], p[2], p[1]:match('^%S+')), p[4])
         end
         for _, t in ipairs({ 'd11_ptrunk_pose', 'd11_ptrunk_profiles' }) do
             local ok = pcall(MySQL.scalar.await, ('SELECT COUNT(*) FROM `%s`'):format(t))
-            check(ok, 'tabela ' .. t, 'tabela ' .. t .. ' não existe ou o banco não respondeu', true)
+            check(ok, L('table ', 'tabela ') .. t, L('table ', 'tabela ') .. t .. L(' does not exist or the database did not answer', ' não existe ou o banco não respondeu'), true)
         end
         local n = 0
         for _ in pairs(profiles.spawn) do n = n + 1 end
-        oks[#oks + 1] = ('%d perfil(is) de área no banco (os do data/profiles valem por baixo)'):format(n)
-        print(('[d11_ptrunk] /ptrunkpreflight: %d problema(s), %d aviso(s)'):format(#issues, #warns))
-        for _, t in ipairs(issues) do print('  PROBLEMA ' .. t) end
-        for _, t in ipairs(warns) do print('  aviso    ' .. t) end
+        oks[#oks + 1] = (L('%d area profile(s) in the database (data/profiles apply under them)', '%d perfil(is) de área no banco (os do data/profiles valem por baixo)')):format(n)
+        print((L('[d11_ptrunk] /ptrunkpreflight: %d problem(s), %d warning(s)', '[d11_ptrunk] /ptrunkpreflight: %d problema(s), %d aviso(s)')):format(#issues, #warns))
+        for _, t in ipairs(issues) do print(L('  PROBLEM  ', '  PROBLEMA ') .. t) end
+        for _, t in ipairs(warns) do print(L('  warning  ', '  aviso    ') .. t) end
         for _, t in ipairs(oks) do print('  ok       ' .. t) end
         if src ~= 0 then
-            say(src, #issues > 0 and ('Preflight: %d problema(s). Veja o console do servidor.'):format(#issues)
-                or #warns > 0 and ('Preflight ok com %d aviso(s). Veja o console do servidor.'):format(#warns)
+            say(src, #issues > 0 and (L('Preflight: %d problem(s). See the server console.', 'Preflight: %d problema(s). Veja o console do servidor.')):format(#issues)
+                or #warns > 0 and (L('Preflight ok with %d warning(s). See the server console.', 'Preflight ok com %d aviso(s). Veja o console do servidor.')):format(#warns)
                 or 'Preflight ok.', #issues > 0 and 'error' or 'success')
         end
     end)

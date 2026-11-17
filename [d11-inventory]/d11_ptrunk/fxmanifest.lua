@@ -5,7 +5,7 @@ lua54 'yes'
 name 'd11_ptrunk'
 author 'D11'
 description 'D11 Physical Trunk for WHIP: the boot seen from behind the car, its items as props, inside the WHIP inventory'
-version '1.0.0'
+version '1.0.1'
 license 'MIT'
 
 -- Port of velocity-physicaltrunk (D12) to WHIP. Plan and phases: docs/PLANO-PHYSICALTRUNK-WHIP.md.
